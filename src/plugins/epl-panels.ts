@@ -1,0 +1,51 @@
+/**
+ * EPL Custom Panels Plugin
+ *
+ * Registers Gerda's 5 custom Mission Control panels:
+ *   - today        Personal landing (top 3 actions, agents overnight, KPIs, waiting)
+ *   - projects     6-col Kanban (Asana replacement)
+ *   - properties   16-tile heat map + Hot/Star callouts
+ *   - maintenance  Hugo Phase 3 — Kanban + heat map
+ *   - decisions    32-decision queue with Atlas recommendations
+ *
+ * Visual spec: ~/mission-control/mockup/*.html (signed off 26 May 2026)
+ * Build runbook: ~/mission-control/JOSE_HANDOFF.md
+ * Emergent prompts: ~/mission-control/EMERGENT_PROMPTS.md
+ *
+ * Bootstrap: imported as a side-effect by src/app/[[...panel]]/page.tsx so
+ * registrations run before nav-rail / router lookup.
+ */
+
+import { registerNavItems, registerPanel } from '@/lib/plugins'
+import { EplTodayPanel } from '@/components/panels/epl-today-panel'
+import { EplProjectsPanel } from '@/components/panels/epl-projects-panel'
+import { EplPropertiesPanel } from '@/components/panels/epl-properties-panel'
+import { EplMaintenancePanel } from '@/components/panels/epl-maintenance-panel'
+import { EplDecisionsPanel } from '@/components/panels/epl-decisions-panel'
+import { EplAgentsPanel } from '@/components/panels/epl-agents-panel'
+
+let _initialised = false
+
+export function initEplPanelsPlugin(): void {
+  if (_initialised) return
+  _initialised = true
+
+  registerNavItems([
+    { id: 'today',         label: 'Today',          groupId: 'core', icon: '🌅' },
+    { id: 'projects',      label: 'Projects',       groupId: 'core', icon: '📋' },
+    { id: 'properties',    label: 'Properties',     groupId: 'core', icon: '🏠' },
+    { id: 'maintenance',   label: 'Maintenance',    groupId: 'core', icon: '🔧' },
+    { id: 'decisions',     label: 'Decisions',      groupId: 'core', icon: '🎯' },
+    { id: 'agents-fleet',  label: 'Agents (fleet)', groupId: 'core', icon: '🤖' },
+  ])
+
+  registerPanel('today',         EplTodayPanel)
+  registerPanel('projects',      EplProjectsPanel)
+  registerPanel('properties',    EplPropertiesPanel)
+  registerPanel('maintenance',   EplMaintenancePanel)
+  registerPanel('decisions',     EplDecisionsPanel)
+  registerPanel('agents-fleet',  EplAgentsPanel)
+}
+
+// Self-register on import (matches the side-effect import pattern used by page.tsx).
+initEplPanelsPlugin()

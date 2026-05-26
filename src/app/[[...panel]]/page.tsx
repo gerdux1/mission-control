@@ -60,6 +60,11 @@ import { clearOnboardingDismissedThisSession, clearOnboardingReplayFromStart, ge
 import { Button } from '@/components/ui/button'
 import { useMissionControl } from '@/store'
 
+// EPL custom panels — self-register via side-effect import.
+// Registers nav items + panel components for today/projects/properties/maintenance/decisions.
+// See src/plugins/epl-panels.ts and ~/mission-control/JOSE_HANDOFF.md.
+import '@/plugins/epl-panels'
+
 interface GatewaySummary {
   id: number
   is_primary: number
