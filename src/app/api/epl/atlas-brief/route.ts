@@ -35,8 +35,15 @@ interface BriefBundle {
 async function fetchPart(req: NextRequest, path: string): Promise<any> {
   // Build absolute URL from the incoming request so we work in any deployment.
   const base = `${new URL(req.url).origin}`
+  // Forward inbound auth so MC middleware lets the internal call through.
+  // Prefer x-api-key header; fall back to cookie (browser session).
+  const headers: Record<string, string> = {}
+  const apiKey = req.headers.get('x-api-key')
+  if (apiKey) headers['x-api-key'] = apiKey
+  const cookie = req.headers.get('cookie')
+  if (cookie) headers['cookie'] = cookie
   try {
-    const res = await fetch(`${base}${path}`, { cache: 'no-store' })
+    const res = await fetch(`${base}${path}`, { cache: 'no-store', headers })
     if (!res.ok) return { error: `HTTP ${res.status}`, path }
     return await res.json()
   } catch (e: unknown) {
