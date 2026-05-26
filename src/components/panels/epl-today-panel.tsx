@@ -1,33 +1,217 @@
 'use client'
 
 /**
- * EPL Today Panel — personal landing for Gerda.
+ * EPL Today Panel — Gerda's personal landing.
  *
- * STUB v1 (26 May 2026):
- *   Currently serves the signed-off HTML mockup via iframe so Mission Control
- *   shows the canonical visual immediately. Jose will replace this with
- *   Emergent-generated React. See EMERGENT_PROMPTS.md (prompt 1) and
- *   /mockup/today-panel-preview.html for the spec.
+ * v0.1 baseline shipped 26 May 2026 evening — REAL React, no iframe.
+ * Jose can replace with Emergent polish later (see EMERGENT_PROMPTS.md §1)
+ * by editing this same file. The API contract at /api/epl/today won't change.
  *
- * Aggregator sources (when the React lands):
- *   - Top 3 Actions   → /api/epl/today?part=actions   (atlas.db + sofia urgency)
- *   - Agents overnight → /api/epl/today?part=agents   (mc-cli agents list --json)
- *   - KPIs            → /api/epl/today?part=kpis      (atlas /api/stats + hugo /api/stats)
- *   - Waiting on you  → /api/epl/today?part=waiting   (decisions.yaml age filter >0d)
+ * Data fetched from /api/epl/today; nav buttons follow each item's `deeplink`
+ * field so cross-navigation just works.
  *
- * Cross-nav contract: header chips link to /projects /properties /maintenance /decisions
+ * Tailwind classes only (no extra deps); MC fork has Tailwind 3 + dark mode.
  */
 
-import { EplPanelFrame } from './epl-panel-frame'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface Action {
+  id: string
+  title: string
+  why: string
+  cta: string
+  deeplink: string
+}
+
+interface AgentRow {
+  name: string
+  role: string
+  actions: number
+  status: 'ok' | 'review' | 'offline'
+  headline: string
+}
+
+interface Kpi {
+  label: string
+  value: string
+  delta: string
+}
+
+interface WaitingItem {
+  id: string
+  title: string
+  age: string
+  category: string
+  owner: string
+}
+
+interface TodayData {
+  generatedAt: string
+  actions: Action[]
+  agentsOvernight: AgentRow[]
+  kpis: Kpi[]
+  waitingOnYou: WaitingItem[]
+}
+
+const AGENT_EMOJI: Record<string, string> = {
+  sofia: '📨', james: '💰', leo: '📣', victoria: '💼', aria: '💡',
+  marcus: '🛡', atlas: '🧭', edward: '🪐', cleo: '💵', iris: '⭐',
+  larry: '🤝', nina: '🌱', nathan: '📊', hugo: '🔧', owen: '🔬',
+}
 
 export function EplTodayPanel() {
+  const router = useRouter()
+  const [data, setData] = useState<TodayData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await fetch('/api/epl/today', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setData(await res.json())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  if (loading && !data) {
+    return <div className="p-8 text-sm text-slate-500">Loading Today…</div>
+  }
+  if (error && !data) {
+    return (
+      <div className="p-8">
+        <div className="text-rose-700 font-medium">Failed to load /api/epl/today</div>
+        <div className="text-xs text-slate-500 mt-1">{error}</div>
+        <button onClick={load} className="mt-3 px-3 py-1 text-sm rounded bg-slate-100 hover:bg-slate-200">Retry</button>
+      </div>
+    )
+  }
+  if (!data) return null
+
+  const date = new Date(data.generatedAt).toLocaleDateString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
+
   return (
-    <EplPanelFrame
-      id="today"
-      title="Today"
-      mockupHref="/mockup/today-panel-preview.html"
-      promptRef="EMERGENT_PROMPTS.md → §1 Today"
-      apiBase="/api/epl/today"
-    />
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Greeting */}
+      <header className="flex items-baseline gap-3 flex-wrap">
+        <h1 className="text-2xl font-semibold tracking-tight">Good morning Gerda</h1>
+        <span className="text-slate-500">{date}</span>
+        <span className="ml-auto text-xs text-slate-400">
+          Generated {new Date(data.generatedAt).toLocaleTimeString('en-GB')} · <button onClick={load} className="underline hover:text-slate-600">refresh</button>
+        </span>
+      </header>
+
+      {/* Top 3 Actions */}
+      <section>
+        <h2 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Top 3 actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {data.actions.slice(0, 3).map((a) => (
+            <button
+              key={a.id}
+              onClick={() => router.push(a.deeplink)}
+              className="text-left bg-white rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-sm p-4 transition"
+            >
+              <div className="text-sm font-medium text-slate-900">{a.title}</div>
+              <div className="text-xs text-slate-600 mt-2">{a.why}</div>
+              <div className="text-xs text-emerald-700 mt-3 font-medium">{a.cta} →</div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Agents overnight */}
+      <section>
+        <h2 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Agents overnight</h2>
+        <div className="flex flex-wrap gap-2">
+          {data.agentsOvernight.map((a) => {
+            const dot =
+              a.status === 'ok' ? 'bg-emerald-500'
+              : a.status === 'review' ? 'bg-amber-500'
+              : 'bg-slate-400'
+            return (
+              <button
+                key={a.name}
+                onClick={() => router.push(`/agents-fleet`)}
+                title={a.headline}
+                className="flex items-center gap-2 bg-white rounded-full border border-slate-200 px-3 py-1 text-sm hover:border-slate-400"
+              >
+                <span className={`inline-block w-2 h-2 rounded-full ${dot}`} />
+                <span>{AGENT_EMOJI[a.name] ?? '🤖'}</span>
+                <span className="font-medium capitalize">{a.name}</span>
+                <span className="text-xs text-slate-500">· {a.role}</span>
+                <span className="text-xs text-slate-400">({a.actions})</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* KPIs */}
+      <section>
+        <h2 className="text-xs uppercase tracking-wide text-slate-500 mb-2">KPIs</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {data.kpis.map((k) => (
+            <div key={k.label} className="bg-white rounded-2xl border border-slate-200 p-4">
+              <div className="text-xs uppercase tracking-wide text-slate-500">{k.label}</div>
+              <div className="mt-1 text-2xl font-semibold">{k.value}</div>
+              <div className="text-xs text-slate-500 mt-1">{k.delta}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Waiting on you */}
+      <section>
+        <h2 className="text-xs uppercase tracking-wide text-slate-500 mb-2">Waiting on you</h2>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium">id</th>
+                <th className="text-left px-4 py-2 font-medium">title</th>
+                <th className="text-left px-4 py-2 font-medium">age</th>
+                <th className="text-left px-4 py-2 font-medium">category</th>
+                <th className="text-left px-4 py-2 font-medium">owner</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.waitingOnYou.map((w) => {
+                const days = parseInt(w.age, 10) || 0
+                const ageClass =
+                  days >= 7 ? 'bg-rose-100 text-rose-800'
+                  : days >= 2 ? 'bg-amber-100 text-amber-800'
+                  : 'bg-emerald-100 text-emerald-800'
+                return (
+                  <tr
+                    key={w.id}
+                    className="hover:bg-slate-50 cursor-pointer"
+                    onClick={() => router.push(`/decisions?id=${w.id}`)}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs">{w.id}</td>
+                    <td className="px-4 py-3">{w.title}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs ${ageClass}`}>{w.age}</span></td>
+                    <td className="px-4 py-3 text-slate-600">{w.category}</td>
+                    <td className="px-4 py-3 text-slate-600">{w.owner}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer className="text-xs text-slate-400 pt-4 border-t border-slate-100">
+        Aggregator source: <code>/api/epl/today</code>. v0.1 baseline React — Emergent polish welcome (see EMERGENT_PROMPTS.md §1).
+      </footer>
+    </div>
   )
 }
