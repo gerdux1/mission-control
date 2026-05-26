@@ -32,11 +32,21 @@ interface BriefBundle {
   stale_roadmaps: any
 }
 
+function internalBase(req: NextRequest): string {
+  // Override (preferred on the VPS so we skip TLS round-trip):
+  //   MC_INTERNAL_URL=http://127.0.0.1:4000
+  // Otherwise fall back to PORT-based localhost (works in dev), then to
+  // the inbound request origin (works when the container can hit its own
+  // public URL — not the case on Hetzner because Node fetch can't verify
+  // the LE cert chain inside the slim runtime image).
+  if (process.env.MC_INTERNAL_URL) return process.env.MC_INTERNAL_URL.replace(/\/$/, '')
+  const port = process.env.PORT || '3000'
+  return `http://127.0.0.1:${port}`
+}
+
 async function fetchPart(req: NextRequest, path: string): Promise<any> {
-  // Build absolute URL from the incoming request so we work in any deployment.
-  const base = `${new URL(req.url).origin}`
+  const base = internalBase(req)
   // Forward inbound auth so MC middleware lets the internal call through.
-  // Prefer x-api-key header; fall back to cookie (browser session).
   const headers: Record<string, string> = {}
   const apiKey = req.headers.get('x-api-key')
   if (apiKey) headers['x-api-key'] = apiKey
@@ -44,10 +54,10 @@ async function fetchPart(req: NextRequest, path: string): Promise<any> {
   if (cookie) headers['cookie'] = cookie
   try {
     const res = await fetch(`${base}${path}`, { cache: 'no-store', headers })
-    if (!res.ok) return { error: `HTTP ${res.status}`, path }
+    if (!res.ok) return { error: `HTTP ${res.status}`, path, base }
     return await res.json()
   } catch (e: unknown) {
-    return { error: e instanceof Error ? e.message : 'fetch-failed', path }
+    return { error: e instanceof Error ? e.message : 'fetch-failed', path, base }
   }
 }
 
