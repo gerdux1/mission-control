@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { tryFetchAgentStats, ROADMAP_AGES } from './_helpers'
+import { readHeartbeat, heartbeatAgentMap } from '@/lib/atlas-heartbeat'
 
 interface AgentRow {
   name: string
@@ -51,23 +52,56 @@ const FALLBACK: AgentRow[] = [
   { name: 'owen',      role: 'Guest-area research',     category: 'Research',     phase: '2a shipped',    status: 'ok',      last_action: '2026-05-26T17:00:00Z', roadmap_age_days: ROADMAP_AGES.owen,     kpi_count: 3, headline: '67 tests · 91% coverage · awaiting venv install', stats_source: 'mock' },
 ]
 
+function ageHoursFromActionTs(ts: string | null): number | null {
+  if (!ts) return null
+  // Atlas writes "YYYY-MM-DD HH:MM:SS" (UTC, no Z). Treat as UTC.
+  const iso = ts.replace(' ', 'T') + 'Z'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return Math.max(0, (Date.now() - d.getTime()) / 3_600_000)
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const part = url.searchParams.get('part')
 
-  // Hydrate Hugo (first agent with a real /api/stats) — graceful degrade to mock.
+  // 1. Read Atlas heartbeat (cheap fs read, null if mount missing).
+  const hb = await readHeartbeat()
+  const hbMap = heartbeatAgentMap(hb)
+
+  // 2. Build per-agent rows: start from FALLBACK snapshot, overlay heartbeat
+  //    fields where present, then try the agent's own /api/stats URL.
   const agents: AgentRow[] = await Promise.all(FALLBACK.map(async (a) => {
-    if (!a.stats_url) return a
-    const live = await tryFetchAgentStats(a.stats_url)
-    if (!live) return a  // Hugo offline → keep mock + status 'offline'
-    const p0 = live.open_p0 ?? 0
-    return {
-      ...a,
-      status: (p0 > 0 ? 'review' : 'ok') as AgentRow['status'],
-      kpi_count: 5,
-      headline: `${live.open ?? 0} open · ${p0} P0 · ${live.resolved_this_week ?? 0} resolved this week`,
-      stats_source: 'live' as const,
+    const hbA = hbMap.get(a.name)
+    let row: AgentRow = { ...a }
+    if (hbA) {
+      const lastAgeH = ageHoursFromActionTs(hbA.last_action_at)
+      row = {
+        ...row,
+        status: (hbA.status === 'live' ? (hbA.tasks_today > 5 ? 'review' : 'ok') : (hbA.status as AgentRow['status'])),
+        last_action: hbA.last_action_at ?? row.last_action,
+        headline: hbA.last_action
+          ? `${hbA.tasks_today} tasks today · $${hbA.cost_today_usd.toFixed(2)} · last: ${hbA.last_action}${lastAgeH != null ? ` (${Math.round(lastAgeH)}h ago)` : ''}`
+          : hbA.tasks_today > 0
+            ? `${hbA.tasks_today} tasks today · $${hbA.cost_today_usd.toFixed(2)}`
+            : row.headline,
+        stats_source: 'live' as const,
+      }
     }
+    // Per-agent /api/stats overlay (Hugo has this, others mock)
+    if (a.stats_url) {
+      const live = await tryFetchAgentStats(a.stats_url)
+      if (live) {
+        const p0 = live.open_p0 ?? 0
+        row = {
+          ...row,
+          status: (p0 > 0 ? 'review' : 'ok') as AgentRow['status'],
+          headline: `${live.open ?? 0} open · ${p0} P0 · ${live.resolved_this_week ?? 0} resolved this week`,
+          stats_source: 'live' as const,
+        }
+      }
+    }
+    return row
   }))
 
   if (part === 'summary') {
@@ -78,6 +112,10 @@ export async function GET(req: NextRequest) {
       review: agents.filter(a => a.status === 'review').length,
       offline: agents.filter(a => a.status === 'offline').length,
       stale_roadmaps: agents.filter(a => a.roadmap_age_days > 7).length,
+      heartbeat_source: hb ? 'atlas-live' : 'mock',
+      heartbeat_ts: hb?.timestamp ?? null,
+      spend_today_usd: hb?.spend_today_usd ?? null,
+      pending_approvals: hb?.pending_approvals ?? null,
     })
   }
 
@@ -99,5 +137,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ groups })
   }
 
-  return NextResponse.json({ generatedAt: new Date().toISOString(), agents })
+  return NextResponse.json({
+    generatedAt: new Date().toISOString(),
+    heartbeat_source: hb ? 'atlas-live' : 'mock',
+    heartbeat_ts: hb?.timestamp ?? null,
+    spend_today_usd: hb?.spend_today_usd ?? null,
+    pending_approvals: hb?.pending_approvals ?? null,
+    agents,
+  })
 }

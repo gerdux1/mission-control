@@ -15,6 +15,31 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { readHeartbeat, heartbeatAgentMap, type AtlasHeartbeatAgent } from '@/lib/atlas-heartbeat'
+
+function agentRoleLabel(name: string): string {
+  const m: Record<string, string> = {
+    sofia: 'PA', james: 'Finance', leo: 'Marketing', victoria: 'Revenue',
+    aria: 'Pricing', marcus: 'Compliance', atlas: 'CoS', edward: 'Meta',
+    cleo: 'Cash', iris: 'QA', larry: 'Landlord', nina: 'Onboarding',
+    nathan: 'Acquisition', hugo: 'Maint', owen: 'Research', mila: 'Health',
+    'urban-ready': 'Wholesale',
+  }
+  return m[name] ?? 'Agent'
+}
+
+function agentRowFromHb(hb: AtlasHeartbeatAgent) {
+  const status = hb.status === 'live' ? 'ok' : hb.status === 'offline' ? 'offline' : 'review'
+  return {
+    name: hb.name,
+    role: agentRoleLabel(hb.name),
+    actions: hb.tasks_today,
+    status: status as 'ok' | 'review' | 'offline',
+    headline: hb.last_action
+      ? `${hb.tasks_today} tasks · $${hb.cost_today_usd.toFixed(2)} · last: ${hb.last_action}`
+      : `${hb.tasks_today} tasks today · $${hb.cost_today_usd.toFixed(2)}`,
+  }
+}
 
 const MOCK = {
   generatedAt: new Date().toISOString(),
@@ -49,10 +74,46 @@ const MOCK = {
 
 export async function GET(req: NextRequest) {
   const part = new URL(req.url).searchParams.get('part')
-  if (part === 'actions')   return NextResponse.json({ generatedAt: MOCK.generatedAt, actions: MOCK.actions })
-  if (part === 'agents')    return NextResponse.json({ generatedAt: MOCK.generatedAt, agentsOvernight: MOCK.agentsOvernight })
-  if (part === 'kpis')      return NextResponse.json({ generatedAt: MOCK.generatedAt, kpis: MOCK.kpis })
-  if (part === 'waiting')   return NextResponse.json({ generatedAt: MOCK.generatedAt, waitingOnYou: MOCK.waitingOnYou })
-  if (part === 'summary')   return NextResponse.json({ generatedAt: MOCK.generatedAt, ok: true, parts: ['actions', 'agents', 'kpis', 'waiting'] })
-  return NextResponse.json(MOCK)
+
+  // Try real heartbeat — overlay agentsOvernight + 1 KPI if present.
+  const hb = await readHeartbeat()
+  const hbMap = heartbeatAgentMap(hb)
+
+  // Build agentsOvernight: prefer heartbeat rows when available; else mock.
+  let agentsOvernight = MOCK.agentsOvernight
+  if (hb && hb.agents.length > 0) {
+    // Show the 7 most-active agents (or all if fewer), heartbeat-sourced.
+    const ranked = [...hb.agents]
+      .filter(a => a.name && a.status !== 'offline')
+      .sort((a, b) => (b.tasks_today + (b.last_action ? 1 : 0)) - (a.tasks_today + (a.last_action ? 1 : 0)))
+      .slice(0, 7)
+      .map(agentRowFromHb)
+    if (ranked.length > 0) agentsOvernight = ranked
+  }
+
+  // KPI strip: replace "Active flats" with live spend if heartbeat present.
+  let kpis = MOCK.kpis
+  if (hb) {
+    kpis = [
+      ...MOCK.kpis.slice(0, 3),
+      { label: 'Agent spend today', value: `$${hb.spend_today_usd.toFixed(2)}`, delta: `${hb.pending_approvals} pending approval${hb.pending_approvals === 1 ? '' : 's'}` },
+    ]
+  }
+
+  const enriched = {
+    generatedAt: new Date().toISOString(),
+    actions: MOCK.actions,
+    agentsOvernight,
+    kpis,
+    waitingOnYou: MOCK.waitingOnYou,
+    heartbeat_source: hb ? 'atlas-live' : 'mock',
+    heartbeat_ts: hb?.timestamp ?? null,
+  }
+
+  if (part === 'actions')   return NextResponse.json({ generatedAt: enriched.generatedAt, actions: enriched.actions })
+  if (part === 'agents')    return NextResponse.json({ generatedAt: enriched.generatedAt, agentsOvernight: enriched.agentsOvernight, heartbeat_source: enriched.heartbeat_source })
+  if (part === 'kpis')      return NextResponse.json({ generatedAt: enriched.generatedAt, kpis: enriched.kpis })
+  if (part === 'waiting')   return NextResponse.json({ generatedAt: enriched.generatedAt, waitingOnYou: enriched.waitingOnYou })
+  if (part === 'summary')   return NextResponse.json({ generatedAt: enriched.generatedAt, ok: true, heartbeat_source: enriched.heartbeat_source, parts: ['actions', 'agents', 'kpis', 'waiting'] })
+  return NextResponse.json(enriched)
 }
