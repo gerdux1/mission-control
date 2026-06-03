@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { logAuditEvent, getDatabase } from '@/lib/db'
+import { applyDecisionAction } from '@/lib/epl-decisions'
 
 type Action = 'approve' | 'reject' | 'discuss'
 
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: 'action must be approve|reject|discuss', got: action }, { status: 400 })
   }
   const note = typeof body?.note === 'string' ? body.note.slice(0, 1000) : undefined
+  const actor = req.headers.get('x-actor') ?? 'gerda'
   const ts = new Date().toISOString()
   const audit_id = makeAuditId()
 
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     logAuditEvent({
       action: `epl.decision.${action}`,
-      actor: req.headers.get('x-actor') ?? 'gerda',
+      actor,
       target_type: 'epl_decision',
       detail: { id, action, note, audit_id },
       ip_address: req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? undefined,
@@ -55,8 +57,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     console.warn(`[epl/decision] audit_log write failed: ${e instanceof Error ? e.message : 'unknown'}`)
     persisted = 'in-memory-fallback'
   }
-  console.log(`[epl/decision] id=${id} action=${action} audit=${audit_id} persisted=${persisted}`)
-  return NextResponse.json({ ok: true, id, action, ts, audit_id, note, note_persisted: persisted })
+
+  // Update the decision row itself: approve/reject → decided; approve of a row
+  // carrying a routable target_agent → routing_status='pending' (Atlas picks up
+  // via ?part=routable). Best-effort: never fail the action if this errors.
+  let decision = null
+  let routing_status: string | undefined
+  try {
+    decision = applyDecisionAction(id, action, note, actor)
+    routing_status = decision?.routing_status
+  } catch (e) {
+    console.warn(`[epl/decision] row update failed: ${e instanceof Error ? e.message : 'unknown'}`)
+  }
+
+  console.log(`[epl/decision] id=${id} action=${action} audit=${audit_id} persisted=${persisted} routing=${routing_status ?? 'n/a'}`)
+  return NextResponse.json({ ok: true, id, action, ts, audit_id, note, note_persisted: persisted, routing_status, decision })
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

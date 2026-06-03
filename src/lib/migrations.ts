@@ -1428,6 +1428,42 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN signature TEXT DEFAULT NULL`)
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN public_key TEXT DEFAULT NULL`)
     }
+  },
+  {
+    id: '051_epl_decisions',
+    up(db: Database.Database) {
+      // Real backing for the EPL decisions / backlog panel — replaces the
+      // hardcoded mock list and acts as the sink of the meeting → backlog
+      // intake loop (Edward proposes, Gerda approves, Atlas routes).
+      // Seed rows are inserted lazily by src/lib/epl-decisions.ts, not here.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS epl_decisions (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'Architecture',
+          status TEXT NOT NULL DEFAULT 'open',
+          age_days INTEGER NOT NULL DEFAULT 0,
+          owner TEXT NOT NULL DEFAULT 'Gerda',
+          recommendation TEXT,
+          default_applied TEXT,
+          source TEXT NOT NULL DEFAULT 'manual',
+          proposed_payload TEXT,
+          decision_action TEXT,
+          decided_by TEXT,
+          decided_at INTEGER,
+          note TEXT,
+          routing_status TEXT NOT NULL DEFAULT 'none',
+          routed_to TEXT,
+          routed_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_epl_decisions_status ON epl_decisions(status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_epl_decisions_routing ON epl_decisions(routing_status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_epl_decisions_source ON epl_decisions(source)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_epl_decisions_created ON epl_decisions(created_at)`)
+    }
   }
 ]
 
