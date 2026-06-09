@@ -19,6 +19,32 @@ import { readHeartbeat, heartbeatAgentMap, type AtlasHeartbeatAgent } from '@/li
 import { readPendingApprovals } from '@/lib/atlas-approvals'
 import { getMaintenanceSummary, maintenanceKpi } from '@/lib/maintenance-summary'
 
+// Live "pending on a human" feed = open hand-offs in the Supabase brain.
+// When reachable, this REPLACES the mock Top-3/Waiting so finished work
+// disappears (hand-offs flip open->done) instead of lingering as fake demo rows.
+const BRAIN_URL =
+  process.env.EPL_BRAIN_URL || process.env.SUPABASE_URL || 'https://blcbvrxssmyqtxemmzzl.supabase.co'
+const BRAIN_KEY = process.env.EPL_BRAIN_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+
+async function brainOpenHandoffs(): Promise<any[] | null> {
+  if (!BRAIN_KEY) return null
+  try {
+    const r = await fetch(
+      `${BRAIN_URL}/rest/v1/handoffs?status=eq.open&select=*&order=created_at.asc`,
+      { headers: { apikey: BRAIN_KEY, Authorization: `Bearer ${BRAIN_KEY}` }, cache: 'no-store' },
+    )
+    if (!r.ok) return null
+    return (await r.json()) as any[]
+  } catch {
+    return null
+  }
+}
+
+function ageDays(iso: string): string {
+  const d = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000))
+  return `${d}d`
+}
+
 function agentRoleLabel(name: string): string {
   const m: Record<string, string> = {
     sofia: 'PA', james: 'Finance', leo: 'Marketing', victoria: 'Revenue',
@@ -80,19 +106,39 @@ export async function GET(req: NextRequest) {
   // Try real heartbeat — overlay agentsOvernight + 1 KPI if present.
   // Try Hugo maintenance summary — overlay KPI[0] when live.
   // Try real approvals from atlas.db — overlay actions when ≥1 pending.
-  const [hb, maintenance] = await Promise.all([readHeartbeat(), getMaintenanceSummary()])
+  const [hb, maintenance, handoffs] = await Promise.all([
+    readHeartbeat(), getMaintenanceSummary(), brainOpenHandoffs(),
+  ])
   const hbMap = heartbeatAgentMap(hb)
   const approvals = readPendingApprovals(3)
+
+  // Source priority for the Top-3 actions + Waiting list:
+  //   1. brain open hand-offs (real, self-clearing)  2. atlas.db approvals  3. mock
+  const brainReachable = handoffs !== null
+  const hoCards = (handoffs ?? []).map(h => ({
+    id: `H${h.id}`,
+    title: h.summary || `${h.from_actor} → ${h.to_actor}`,
+    why: `${h.trigger}${h.sla ? ' · SLA ' + h.sla : ''} · ${ageDays(h.created_at)} open`,
+    cta: 'Open in Team',
+    deeplink: '/team',
+  }))
   const useRealActions = approvals.source === 'atlas-db' && approvals.cards.length > 0
-  const actions = useRealActions
-    ? approvals.cards.map(c => ({
-        id: c.id,
-        title: c.title,
-        why: c.why,
-        cta: c.cta,
-        deeplink: c.deeplink,
+  const actionsSource = brainReachable ? (hoCards.length ? 'brain' : 'brain-empty')
+    : (useRealActions ? 'atlas-db' : 'mock')
+  const actions = brainReachable
+    ? hoCards.slice(0, 3)                         // [] when nothing is pending — honest, no fake rows
+    : useRealActions
+      ? approvals.cards.map(c => ({ id: c.id, title: c.title, why: c.why, cta: c.cta, deeplink: c.deeplink }))
+      : MOCK.actions
+  const waitingOnYou = brainReachable
+    ? (handoffs ?? []).map(h => ({
+        id: `H${h.id}`,
+        title: h.summary || `${h.from_actor} → ${h.to_actor}`,
+        age: ageDays(h.created_at),
+        category: h.trigger || 'hand-off',
+        owner: h.from_actor,
       }))
-    : MOCK.actions
+    : MOCK.waitingOnYou
 
   // Build agentsOvernight: prefer heartbeat rows when available; else mock.
   let agentsOvernight = MOCK.agentsOvernight
@@ -122,11 +168,13 @@ export async function GET(req: NextRequest) {
     actions,
     agentsOvernight,
     kpis,
-    waitingOnYou: MOCK.waitingOnYou,
+    waitingOnYou,
     heartbeat_source: hb ? 'atlas-live' : 'mock',
     heartbeat_ts: hb?.timestamp ?? null,
-    actions_source: useRealActions ? 'atlas-db' : 'mock',
+    actions_source: actionsSource,
     actions_db_pending_count: approvals.source === 'atlas-db' ? approvals.pending_count : null,
+    waiting_source: brainReachable ? 'brain' : 'mock',
+    open_handoffs: brainReachable ? (handoffs?.length ?? 0) : null,
     maintenance_source: maintenance.hugo_status === 'live' ? 'hugo-live' : 'mock',
   }
 
