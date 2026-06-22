@@ -48,7 +48,9 @@ const KEY_PROJECTS = {
   current_projects: '1203645122171598',
   day_to_day_va: '1203640178185218',
   operations_calendar: '1205194277777788',
-  guest_experience_loop: '1215136647884750', // BOOM guidebook rollout — Feb owns (added 22 Jun pilot)
+  guest_experience_loop: '1215136647884750', // BOOM guidebook rollout — Feb owns (22 Jun pilot 1)
+  occupancy_project: '1212516432119230', // 22 Jun pilot 2 — active 40 tasks
+  occupancy_listings_health: '1205126711620841', // 22 Jun pilot 2 — stalled 30 tasks
 };
 
 // MC agent names (lowercased) used for assignee mapping
@@ -125,6 +127,7 @@ function mapAssignee(name) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MC_THROTTLE_MS = Number(process.env.MC_THROTTLE_MS || flagVal('--throttle-ms', '1100'));
 
 // ─── HTTP wrappers ───────────────────────────────────────────────────────
 async function asanaGET(endpoint, token, params = {}) {
@@ -288,7 +291,11 @@ function toMCTask(asanaTask) {
     },
   };
   if (assigned_to) body.assigned_to = assigned_to;
-  if (due_on) body.due_date = due_on;
+  // MC schema wants due_date as Unix seconds (number), not YYYY-MM-DD string.
+  if (due_on) {
+    const ts = Math.floor(new Date(due_on + 'T23:59:59Z').getTime() / 1000);
+    if (Number.isFinite(ts) && ts > 0) body.due_date = ts;
+  }
   return body;
 }
 
@@ -383,7 +390,7 @@ async function main() {
       failed.push({ asana_gid: at.gid, title: body.title, error: e.message });
       console.error(`  FAIL [${at.gid}] ${body.title.slice(0, 60)}: ${e.message}`);
     }
-    await sleep(210); // 5 req/sec ceiling
+    await sleep(MC_THROTTLE_MS); // configurable; default 1100ms (~0.9 req/sec) to stay under MC mutationLimiter
   }
 
   // Summary
