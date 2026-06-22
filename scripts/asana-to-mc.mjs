@@ -48,6 +48,7 @@ const KEY_PROJECTS = {
   current_projects: '1203645122171598',
   day_to_day_va: '1203640178185218',
   operations_calendar: '1205194277777788',
+  guest_experience_loop: '1215136647884750', // BOOM guidebook rollout — Feb owns (added 22 Jun pilot)
 };
 
 // MC agent names (lowercased) used for assignee mapping
@@ -212,8 +213,8 @@ async function fetchAsanaTasks(token) {
     'memberships.project.name', 'memberships.section.name',
   ].join(',');
 
-  // 1. My tasks (incomplete)
-  const myTasks = await asanaPaginate('/tasks', token, {
+  // 1. My tasks (incomplete) — skipped when SKIP_MY_TASKS=1 (pilot migrations)
+  const myTasks = process.env.SKIP_MY_TASKS === '1' ? [] : await asanaPaginate('/tasks', token, {
     assignee: ASANA_USER_ME,
     workspace: ASANA_WORKSPACE,
     completed_since: 'now',
