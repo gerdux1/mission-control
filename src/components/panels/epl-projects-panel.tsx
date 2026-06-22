@@ -57,6 +57,19 @@ function ageBadge(age: string) {
   return 'bg-emerald-100 text-emerald-800'
 }
 
+// Reverse of statusToColumn in /api/epl/projects/route.ts.
+// When a card is dropped into a column, this is the MC status we persist
+// via PUT /api/tasks/[id]. Done column maps to 'done'; the "this week"
+// filter is server-side (completed_at within 7d).
+const COLUMN_TO_STATUS: Record<string, string> = {
+  inbox: 'inbox',
+  up_next: 'assigned',
+  in_progress: 'in_progress',
+  waiting: 'awaiting_owner',
+  review: 'review',
+  done_this_week: 'done',
+}
+
 /** Build a contextual prompt from a card for an assistant hand-off. */
 function cardPrompt(card: Card, colLabel: string) {
   return [
@@ -87,11 +100,16 @@ export function EplProjectsPanel() {
 
   useEffect(() => { load() }, [load])
 
-  const moveCard = useCallback((toCol: string) => {
+  const moveCard = useCallback(async (toCol: string) => {
+    if (!drag) return
+    const { cardId, fromCol } = drag
+    setDrag(null)
+    setOverCol(null)
+    if (fromCol === toCol) return
+
+    // Optimistic UI: move locally first so the drop feels instant.
     setColumns(prev => {
-      if (!prev || !drag) return prev
-      const { cardId, fromCol } = drag
-      if (fromCol === toCol) return prev
+      if (!prev) return prev
       const moved = prev.find(c => c.id === fromCol)?.cards.find(c => c.id === cardId)
       if (!moved) return prev
       return prev.map(c => {
@@ -100,9 +118,24 @@ export function EplProjectsPanel() {
         return c
       })
     })
-    setDrag(null)
-    setOverCol(null)
-  }, [drag])
+
+    // Persist via PUT /api/tasks/[id]. cardId from /api/epl/projects is tasks.id as string.
+    const newStatus = COLUMN_TO_STATUS[toCol]
+    if (!newStatus) return
+    try {
+      const resp = await fetch(`/api/tasks/${cardId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!resp.ok) {
+        // Server rejected — reload from canonical state.
+        await load()
+      }
+    } catch {
+      await load()
+    }
+  }, [drag, load])
 
   const ask = useCallback((card: Card, colLabel: string, target: 'claude' | 'chatgpt') => {
     const q = encodeURIComponent(cardPrompt(card, colLabel))
