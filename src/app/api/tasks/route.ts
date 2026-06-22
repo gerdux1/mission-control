@@ -80,10 +80,18 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    try {
-      await reconcileDeferredTaskCompletions({ workspaceId, limit: 5 })
-    } catch (err) {
-      logger.warn({ err }, 'Deferred task reconciliation failed during task list read')
+    // Dispatch reconciliation disabled by default (22 Jun 2026): the dispatch
+    // path was incomplete and was actively flipping fresh tasks to status=failed
+    // after 5 retries hitting "ANTHROPIC_API_KEY not set — cannot dispatch
+    // without gateway". Agents run as independent systemd services, MC is the
+    // kanban lens — dispatch is opt-in. Set MC_DISPATCH_ENABLED=1 in .env when
+    // wiring this properly. See memory/finding_mc_dispatch_eating_tasks_22jun.md
+    if (process.env.MC_DISPATCH_ENABLED === '1') {
+      try {
+        await reconcileDeferredTaskCompletions({ workspaceId, limit: 5 })
+      } catch (err) {
+        logger.warn({ err }, 'Deferred task reconciliation failed during task list read')
+      }
     }
     
     // Build dynamic query
