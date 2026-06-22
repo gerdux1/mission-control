@@ -2,6 +2,20 @@
 
 import { useState, useEffect } from "react"
 
+// Iris Auto-Pilot / BAM-health, carried inside the heartbeat (Iris has no HTTP
+// /api/stats like Hugo, so Atlas folds its last_stats.json into the heartbeat).
+// Additive within schema v1 — agents without it simply omit the field.
+interface BamHealth {
+  autopilot_verdict: string | null
+  autopilot_score: string | null
+  headline: string | null
+  fill_loop_pending: number | null
+  boom_session_ok: boolean | null
+  acceptance_pct: number | null
+  ungoverned_pct: number | null
+  as_of: string | null
+}
+
 interface HeartbeatAgent {
   name: string
   status: "live" | "stale" | "drift" | "down" | "unknown"
@@ -12,6 +26,7 @@ interface HeartbeatAgent {
   drift: boolean
   session_last_age_hours: number | null
   notes: string[]
+  bam_health?: BamHealth | null
 }
 
 interface HeartbeatPayload {
@@ -45,6 +60,23 @@ const STATUS_LABEL: Record<HeartbeatAgent["status"], string> = {
   drift: "drift",
   down: "down",
   unknown: "?",
+}
+
+// Auto-Pilot verdict → badge style. Flips toward green as Iris's fill loop
+// drives BAM coverage up.
+const VERDICT_STYLE: Record<string, string> = {
+  READY: "bg-emerald-600/30 text-emerald-300",
+  NEARLY: "bg-amber-600/30 text-amber-300",
+  NOT_READY: "bg-red-600/30 text-red-300",
+  NO_DATA: "bg-slate-600/30 text-slate-300",
+}
+
+function verdictStyle(verdict: string | null): string {
+  return VERDICT_STYLE[verdict || "NO_DATA"] || VERDICT_STYLE.NO_DATA
+}
+
+function verdictLabel(verdict: string | null): string {
+  return (verdict || "NO_DATA").replace(/_/g, " ")
 }
 
 function relativeTime(epochSeconds: number): string {
@@ -211,6 +243,31 @@ export function FleetHeartbeatCard() {
                     {a.cost_today_usd > 0 && (
                       <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
                         ${a.cost_today_usd.toFixed(3)}
+                      </div>
+                    )}
+                    {a.bam_health && (
+                      <div
+                        className="mt-1 border-t border-slate-700 pt-1 space-y-0.5"
+                        title={a.bam_health.headline || undefined}
+                      >
+                        <span
+                          className={`inline-block px-1 rounded text-[10px] ${verdictStyle(
+                            a.bam_health.autopilot_verdict
+                          )}`}
+                        >
+                          ✈ {verdictLabel(a.bam_health.autopilot_verdict)}
+                          {a.bam_health.autopilot_score
+                            ? ` ${a.bam_health.autopilot_score}`
+                            : ""}
+                        </span>
+                        {(a.bam_health.fill_loop_pending ?? 0) > 0 && (
+                          <div className="text-[10px] text-slate-500">
+                            fill-loop {a.bam_health.fill_loop_pending}
+                          </div>
+                        )}
+                        {a.bam_health.boom_session_ok === false && (
+                          <div className="text-[10px] text-red-400">BOOM session down</div>
+                        )}
                       </div>
                     )}
                   </div>
