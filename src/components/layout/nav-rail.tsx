@@ -45,7 +45,6 @@ const navGroups: NavGroup[] = [
       { id: 'logs', label: 'Logs', icon: <LogsIcon />, priority: false, essential: true },
       { id: 'cost-tracker', label: 'Cost Tracker', icon: <TokensIcon />, priority: false },
       { id: 'office', label: 'Office', icon: <OfficeIcon />, priority: false },
-      { id: 'monitor', label: 'Monitor', icon: <MonitorIcon />, priority: false },
     ],
   },
   {
@@ -53,7 +52,6 @@ const navGroups: NavGroup[] = [
     label: 'AUTOMATE',
     items: [
       { id: 'cron', label: 'Cron', icon: <CronIcon />, priority: false },
-      { id: 'webhooks', label: 'Webhooks', icon: <WebhookIcon />, priority: false },
       { id: 'alerts', label: 'Alerts', icon: <AlertIcon />, priority: false },
       { id: 'github', label: 'GitHub', icon: <GitHubIcon />, priority: false },
     ],
@@ -65,8 +63,6 @@ const navGroups: NavGroup[] = [
       { id: 'security', label: 'Security', icon: <SecurityIcon />, priority: false },
       { id: 'users', label: 'Users', icon: <UsersIcon />, priority: false },
       { id: 'audit', label: 'Audit', icon: <AuditIcon />, priority: false },
-      { id: 'integrations', label: 'Integrations', icon: <IntegrationsIcon />, priority: false },
-      { id: 'debug', label: 'Debug', icon: <DebugIcon />, priority: false },
       { id: 'settings', label: 'Settings', icon: <SettingsIcon />, priority: false, essential: true },
     ],
   },
