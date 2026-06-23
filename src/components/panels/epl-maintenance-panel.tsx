@@ -92,7 +92,7 @@ export function EplMaintenancePanel() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <header className="flex items-baseline gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold tracking-tight">🔧 Maintenance</h1>
-        <span className={`px-2 py-1 rounded-full text-xs ${summary.hugo_status === 'live' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>Hugo {summary.hugo_status === 'live' ? '🟢 live' : '🔴 offline (mock data)'}</span>
+        <span className={`px-2 py-1 rounded-full text-xs ${summary.hugo_status === 'live' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>Hugo {summary.hugo_status === 'live' ? '🟢 live' : '🔴 offline (no live feed)'}</span>
         <button onClick={load} className="ml-auto text-xs underline text-slate-500 hover:text-slate-700">refresh</button>
       </header>
 

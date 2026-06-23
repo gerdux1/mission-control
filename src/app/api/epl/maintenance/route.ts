@@ -1,35 +1,45 @@
 /**
  * GET /api/epl/maintenance
  *
- * Hugo Phase 3 home — Kanban + property heat map + Vauxhall drawer data.
- * Mock matches /mockup/maintenance-panel-preview.html.
+ * Hugo Phase 3 home — Kanban + property heat map.
  *
- * Wire when Hugo is live:
- *   - tickets list   → hugo /api/stats + supabase maintenance_tickets
- *   - per-property   → group by canonical_id
+ * REAL DATA: reads /atlas-data/mc_maintenance.json if an exporter writes it.
+ * There is NO live maintenance feed yet (Hugo is not deployed), so when the
+ * file is absent this returns an EMPTY board + a pending flag rather than
+ * fabricated tickets. The panel shows "no live feed" honestly.
  *
  * Assignee allowlist: never show U07FQ300EVB (Hanna) or U09MSN2EFK6 (Abuzar dup).
  * Severity colours: P0 red · P1 orange · P2 amber · P3 grey.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { readFileSync } from 'node:fs'
 import { getMaintenanceSummary } from '@/lib/maintenance-summary'
 
-const TICKETS = [
-  { id: 'T-001', property: 'VAUXHALL_1', summary: 'Boiler error E04 — no hot water',         severity: 'P1', status: 'in_progress',   assignee: 'Zain', age_hours: 18, ts: '2026-05-26T07:12:00Z' },
-  { id: 'T-002', property: 'VAUXHALL_1', summary: 'Front door latch loose',                   severity: 'P2', status: 'open',          assignee: 'Kris', age_hours: 26, ts: '2026-05-25T23:00:00Z' },
-  { id: 'T-003', property: 'VAUXHALL_1', summary: 'Bedroom blind broken',                     severity: 'P3', status: 'awaiting_parts',assignee: 'Kris', age_hours: 192, ts: '2026-05-18T13:00:00Z' },
-  { id: 'T-004', property: 'RUSSELL_SQ', summary: 'Kitchen tap dripping',                     severity: 'P3', status: 'open',          assignee: 'Kris', age_hours: 8, ts: '2026-05-26T09:00:00Z' },
-  { id: 'T-005', property: 'RUSSELL_SQ', summary: 'Living room lamp flickering',              severity: 'P3', status: 'open',          assignee: 'Kris', age_hours: 30, ts: '2026-05-25T11:00:00Z' },
-  { id: 'T-006', property: 'RUSSELL_SQ', summary: 'Washing machine error code F02',           severity: 'P1', status: 'open',          assignee: 'Zain', age_hours: 5, ts: '2026-05-26T12:00:00Z' },
-  { id: 'T-007', property: 'RUSSELL_SQ', summary: 'Wifi router unresponsive',                 severity: 'P2', status: 'open',          assignee: 'Kris', age_hours: 42, ts: '2026-05-24T23:00:00Z' },
-  { id: 'T-008', property: 'KINGS_X_63', summary: 'Heating not warming bedroom',              severity: 'P2', status: 'in_progress',   assignee: 'Zain', age_hours: 11, ts: '2026-05-26T06:00:00Z' },
-  { id: 'T-009', property: 'EUSTON_1',   summary: 'Smoke alarm beeping',                       severity: 'P1', status: 'in_progress',   assignee: 'Zain', age_hours: 4, ts: '2026-05-26T13:00:00Z' },
-  { id: 'T-010', property: 'EUSTON_1',   summary: 'Keybox jammed — guest cannot collect key', severity: 'P0', status: 'in_progress',   assignee: 'Zain', age_hours: 1, ts: '2026-05-26T16:00:00Z' },
-  { id: 'T-011', property: 'TOWER_HILL', summary: 'Shower seal mouldy',                        severity: 'P2', status: 'awaiting_parts',assignee: 'Kris', age_hours: 120, ts: '2026-05-21T13:00:00Z' },
-  { id: 'T-012', property: 'TOWER_HILL', summary: 'Lift out of service — building issue',     severity: 'P3', status: 'open',          assignee: 'Kris', age_hours: 18, ts: '2026-05-26T07:00:00Z' },
-  { id: 'T-013', property: 'PIMLICO_1',  summary: 'Resolved: dishwasher reseated',             severity: 'P2', status: 'resolved',      assignee: 'Zain', age_hours: 2,  ts: '2026-05-26T15:00:00Z' },
-]
+interface Ticket {
+  id: string
+  property: string
+  summary: string
+  severity: 'P0' | 'P1' | 'P2' | 'P3'
+  status: string
+  assignee: string
+  age_hours: number
+  ts: string
+}
+
+const REAL_PATH = process.env.MC_MAINTENANCE_JSON || '/atlas-data/mc_maintenance.json'
+
+function loadTickets(): { tickets: Ticket[]; real: boolean; generatedAt?: string } {
+  try {
+    const raw = JSON.parse(readFileSync(REAL_PATH, 'utf8'))
+    if (Array.isArray(raw.tickets)) {
+      return { tickets: raw.tickets as Ticket[], real: true, generatedAt: raw.generatedAt }
+    }
+  } catch {
+    // no live feed → empty board (honest), not fabricated tickets
+  }
+  return { tickets: [], real: false }
+}
 
 function statusBucket(s: string) {
   if (s === 'open') return 'inbox'
@@ -49,17 +59,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(summary)
   }
 
+  const { tickets, real, generatedAt } = loadTickets()
+
   if (part === 'kanban') {
-    const cols: Record<string, typeof TICKETS> = {
+    const cols: Record<string, Ticket[]> = {
       inbox: [], in_progress: [], awaiting_parts: [], resolved_this_week: [], cancelled: [],
     }
-    TICKETS.forEach(t => cols[statusBucket(t.status)].push(t))
-    return NextResponse.json({ columns: cols })
+    tickets.forEach(t => cols[statusBucket(t.status)].push(t))
+    return NextResponse.json({ columns: cols, real })
   }
 
   if (part === 'heat') {
     const byProperty: Record<string, { open: number; p0: number; p1: number; oldest_hours: number }> = {}
-    TICKETS.forEach(t => {
+    tickets.forEach(t => {
       if (['resolved', 'verified', 'closed', 'cancelled'].includes(t.status)) return
       const k = t.property
       if (!byProperty[k]) byProperty[k] = { open: 0, p0: 0, p1: 0, oldest_hours: 0 }
@@ -68,8 +80,13 @@ export async function GET(req: NextRequest) {
       if (t.severity === 'P1') byProperty[k].p1 += 1
       if (t.age_hours > byProperty[k].oldest_hours) byProperty[k].oldest_hours = t.age_hours
     })
-    return NextResponse.json({ properties: byProperty })
+    return NextResponse.json({ properties: byProperty, real })
   }
 
-  return NextResponse.json({ generatedAt: new Date().toISOString(), tickets: TICKETS })
+  return NextResponse.json({
+    generatedAt: generatedAt || new Date().toISOString(),
+    real,
+    tickets,
+    note: real ? undefined : 'No live maintenance feed yet (Hugo not deployed).',
+  })
 }
