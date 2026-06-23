@@ -35,11 +35,11 @@ export interface MaintenanceSummary {
  */
 const MOCK_SUMMARY: Omit<MaintenanceSummary, 'hugo_stats_url'> = {
   ok: true,
-  open_total: 11,
-  open_p0: 1,
-  open_p1: 3,
-  awaiting_parts_aged_gt7d: 1,
-  resolved_this_week: 1,
+  open_total: 0,
+  open_p0: 0,
+  open_p1: 0,
+  awaiting_parts_aged_gt7d: 0,
+  resolved_this_week: 0,
   hugo_status: 'offline',
 }
 

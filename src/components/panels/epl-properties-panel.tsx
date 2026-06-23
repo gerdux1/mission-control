@@ -1,9 +1,11 @@
 'use client'
 
 /**
- * EPL Properties Panel — v0.1 real React.
+ * EPL Properties Panel — v0.2 real data.
  *
- * Portfolio KPIs + Hot/Star/Cold callouts + 16-tile heat map.
+ * Portfolio KPIs + Hot/Star/Cold callouts + heat map.
+ * Real numbers come from /api/epl/properties (Atlas export of James's P&L +
+ * the canonical registry). Metrics with no real source render as "—".
  * Click tile → drawer fetches /api/epl/properties/[canonical_id].
  */
 
@@ -12,13 +14,13 @@ import { useEffect, useState, useCallback } from 'react'
 interface Tile {
   canonical_id: string
   display_name: string
-  beds: number
+  beds: number | null
   brand: 'EPL' | 'Staylio' | 'NourNest' | 'UrbanReady'
   heat: 'hot' | 'warm' | 'neutral' | 'cool' | 'cold'
-  occupancy_30d: number
-  net_margin_30d: number
-  guest_score: number
-  open_tickets: number
+  occupancy_30d: number | null
+  net_margin_30d: number | null
+  guest_score: number | null
+  open_tickets: number | null
   status: 'live' | 'onboarding' | 'archived'
 }
 
@@ -37,14 +39,23 @@ const BRAND_CLASS: Record<string, string> = {
   UrbanReady: 'bg-amber-100 text-amber-800',
 }
 
+const dash = (v: number | null | undefined) => (v == null ? '—' : v)
+
+function avg(vals: (number | null)[]): number | null {
+  const nums = vals.filter((v): v is number => v != null)
+  return nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null
+}
+
 export function EplPropertiesPanel() {
   const [tiles, setTiles] = useState<Tile[] | null>(null)
+  const [asOf, setAsOf] = useState<Record<string, string> | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<any>(null)
 
   const load = useCallback(async () => {
     const data = await fetch('/api/epl/properties', { cache: 'no-store' }).then(r => r.json())
     setTiles(data.tiles)
+    setAsOf(data.as_of ?? null)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -60,11 +71,15 @@ export function EplPropertiesPanel() {
   if (!tiles) return <div className="p-8 text-sm text-slate-500">Loading properties…</div>
 
   const live = tiles.filter(t => t.status === 'live')
-  const avgOcc = live.length ? Math.round(live.reduce((s, t) => s + t.occupancy_30d, 0) / live.length) : 0
-  const totalNet = live.reduce((s, t) => s + t.net_margin_30d, 0)
-  const avgScore = live.length ? (live.reduce((s, t) => s + t.guest_score, 0) / live.length).toFixed(2) : '—'
+  const avgOcc = avg(live.map(t => t.occupancy_30d))
+  const totalNet = live.reduce((s, t) => s + (t.net_margin_30d ?? 0), 0)
+  const avgScore = avg(live.map(t => t.guest_score))
+  const ticketsKnown = tiles.map(t => t.open_tickets).filter((v): v is number => v != null)
   const hot = tiles.filter(t => t.heat === 'hot').slice(0, 3)
-  const star = tiles.filter(t => t.guest_score >= 4.7 && t.status === 'live').slice(0, 3)
+  const star = tiles
+    .filter(t => t.status === 'live' && (t.guest_score ?? 0) >= 4.7)
+    .sort((a, b) => (b.guest_score ?? 0) - (a.guest_score ?? 0))
+    .slice(0, 3)
   const cold = tiles.filter(t => t.heat === 'cold' || t.heat === 'cool').slice(0, 3)
 
   return (
@@ -77,10 +92,10 @@ export function EplPropertiesPanel() {
 
       {/* Portfolio KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Avg occupancy 30d" value={`${avgOcc}%`} />
+        <Kpi label="Avg occupancy 30d" value={avgOcc == null ? '—' : `${Math.round(avgOcc)}%`} />
         <Kpi label="Total net margin 30d" value={`£${(totalNet / 1000).toFixed(1)}k`} />
-        <Kpi label="Avg guest score" value={String(avgScore)} />
-        <Kpi label="Open maintenance" value={String(tiles.reduce((s, t) => s + t.open_tickets, 0))} />
+        <Kpi label="Avg guest score" value={avgScore == null ? '—' : avgScore.toFixed(2)} />
+        <Kpi label="Open maintenance" value={ticketsKnown.length ? String(ticketsKnown.reduce((s, v) => s + v, 0)) : '—'} />
       </div>
 
       {/* Hot / Star / Cold */}
@@ -98,22 +113,27 @@ export function EplPropertiesPanel() {
             <button key={t.canonical_id} onClick={() => setOpenId(t.canonical_id)} className={`text-left p-4 rounded-2xl border border-slate-200 hover:shadow-md transition ${HEAT_CLASS[t.heat]}`}>
               <div className="text-sm font-medium truncate">{t.display_name}</div>
               <div className="flex items-center gap-2 mt-1 text-xs opacity-80">
-                <span>🛏 {t.beds}</span>
+                <span>🛏 {dash(t.beds)}</span>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${BRAND_CLASS[t.brand]}`}>{t.brand}</span>
               </div>
               <div className="flex items-center gap-3 mt-3 text-xs">
-                <span>🟢 {t.occupancy_30d}%</span>
-                <span>💷 £{t.net_margin_30d}</span>
-                <span>⭐ {t.guest_score || '—'}</span>
+                <span>🟢 {t.occupancy_30d == null ? '—' : `${t.occupancy_30d}%`}</span>
+                <span>💷 {t.net_margin_30d == null ? '—' : `£${t.net_margin_30d}`}</span>
+                <span>⭐ {dash(t.guest_score)}</span>
               </div>
-              {t.open_tickets > 0 && <div className="mt-2 text-xs">🔧 {t.open_tickets}</div>}
+              {t.open_tickets != null && t.open_tickets > 0 && <div className="mt-2 text-xs">🔧 {t.open_tickets}</div>}
             </button>
           ))}
         </div>
       </section>
 
-      <footer className="text-xs text-slate-400 pt-4 border-t border-slate-100">
-        Source: <code>/api/epl/properties</code> · drawer <code>/api/epl/properties/[canonical_id]</code> · Aggregator: BOOM (registry) · PriceLabs (occ) · James (£) · Iris (score) · Hugo (maint)
+      <footer className="text-xs text-slate-400 pt-4 border-t border-slate-100 space-y-1">
+        <div>Source: <code>/api/epl/properties</code> · Aggregator: registry (BOOM aliases) · James (£ &amp; occ &amp; score) · Hugo (maint — pending)</div>
+        {asOf && (
+          <div>
+            As of: margin <b>{asOf.net_margin_30d}</b> · occupancy <b>{asOf.occupancy_30d}</b> · guest score <b>{asOf.guest_score}</b> · tickets <b>{asOf.open_tickets}</b>
+          </div>
+        )}
       </footer>
 
       {openId && (
@@ -178,7 +198,7 @@ function Callout({ title, subtitle, tone, items, onOpen }: { title: string; subt
         {items.length === 0 && <div className="text-xs text-slate-400 italic">none</div>}
         {items.map(t => (
           <button key={t.canonical_id} onClick={() => onOpen(t.canonical_id)} className="block w-full text-left hover:underline">
-            {t.display_name} <span className="text-xs text-slate-500">· {t.occupancy_30d}% · ⭐{t.guest_score || '—'}</span>
+            {t.display_name} <span className="text-xs text-slate-500">· {t.occupancy_30d == null ? '—' : `${t.occupancy_30d}%`} · ⭐{dash(t.guest_score)}</span>
           </button>
         ))}
       </div>
