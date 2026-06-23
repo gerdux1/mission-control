@@ -61,6 +61,8 @@ const menuItems: MenuItem[] = [
   { id: 'nodes', label: 'Nodes', icon: '🖥', description: 'Connected instances' },
   { id: 'exec-approvals', label: 'Approvals', icon: '✅', description: 'Exec approval queue' },
   { id: 'debug', label: 'Debug', icon: '🐛', description: 'System diagnostics' },
+  { id: 'boom-publish', label: 'Publish to BOOM', icon: '📤', description: 'Write guest-portal topics' },
+  { id: 'docs', label: 'Docs', icon: '📖', description: 'System documentation' },
 ]
 
 export function Sidebar() {
