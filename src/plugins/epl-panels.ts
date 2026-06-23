@@ -29,6 +29,12 @@ import { EplTeamPanel } from '@/components/panels/epl-team-panel'
 import { EplAccessMapPanel } from '@/components/panels/epl-access-map-panel'
 import { EplFleetHealthPanel } from '@/components/panels/fleet-health-card'
 import { EplFleetSchedulePanel } from '@/components/panels/fleet-schedule-card'
+import { EplTimelinePanel } from '@/components/panels/epl-timeline-panel'
+import { EplAgentFeedPanel } from '@/components/panels/epl-agent-feed-panel'
+import { EplToolsPanel } from '@/components/panels/epl-tools-panel'
+import { EplApprovalsPanel } from '@/components/panels/epl-approvals-panel'
+import { EplChatPanel } from '@/components/panels/epl-chat-panel'
+import { cockpitApprovalsEnabled, cockpitChatEnabled } from '@/lib/cockpit-flags'
 
 let _initialised = false
 
@@ -48,7 +54,20 @@ export function initEplPanelsPlugin(): void {
     { id: 'team',          label: 'Team',           groupId: 'core', icon: '👥' },
     { id: 'agents-fleet',  label: 'Agents (fleet)', groupId: 'core', icon: '🤖' },
     { id: 'access',        label: 'Setups',         groupId: 'core', icon: '🔑' },
+    // Agent cockpit (Phase 1, read-only) — one Atlas export.
+    { id: 'cockpit-timeline', label: 'Timeline',   groupId: 'core', icon: '🛤' },
+    { id: 'cockpit-feed',     label: 'Agent feed', groupId: 'core', icon: '🔀' },
+    { id: 'cockpit-tools',    label: 'Tools',      groupId: 'core', icon: '🔌' },
   ])
+
+  // Phase-2 ACTION panels — scaffold only, registered ONLY when their flag is
+  // explicitly ON (default OFF). The interactive chat must not deploy live.
+  if (cockpitApprovalsEnabled()) {
+    registerNavItems([{ id: 'cockpit-approvals', label: 'Approvals', groupId: 'core', icon: '✅' }])
+  }
+  if (cockpitChatEnabled()) {
+    registerNavItems([{ id: 'cockpit-chat', label: 'Cockpit chat', groupId: 'core', icon: '💬' }])
+  }
 
   registerPanel('start-here',    EplStartHerePanel)
   registerPanel('today',         EplTodayPanel)
@@ -61,6 +80,15 @@ export function initEplPanelsPlugin(): void {
   registerPanel('team',          EplTeamPanel)
   registerPanel('agents-fleet',  EplAgentsPanel)
   registerPanel('access',        EplAccessMapPanel)
+
+  // Agent cockpit (Phase 1, read-only).
+  registerPanel('cockpit-timeline', EplTimelinePanel)
+  registerPanel('cockpit-feed',     EplAgentFeedPanel)
+  registerPanel('cockpit-tools',    EplToolsPanel)
+
+  // Phase-2 scaffold panels — only reachable when flagged ON (default OFF).
+  if (cockpitApprovalsEnabled()) registerPanel('cockpit-approvals', EplApprovalsPanel)
+  if (cockpitChatEnabled())      registerPanel('cockpit-chat', EplChatPanel)
 }
 
 // Self-register on import (matches the side-effect import pattern used by page.tsx).
