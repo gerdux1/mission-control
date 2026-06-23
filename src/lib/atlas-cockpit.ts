@@ -58,6 +58,32 @@ export interface CockpitConversation {
   turns: number
   last_ts: string
   title: string
+  /**
+   * Phase-2 chat fields (optional — only present for threaded chat dispatches).
+   * `status` tracks the turn lifecycle; `reply` is the latest agent turn text;
+   * `awaiting_approval` flags a turn that triggered an action and dropped into
+   * the approvals inbox. Read-only Q&A threads need none of these.
+   */
+  status?: string
+  reply?: string
+  awaiting_approval?: boolean
+}
+
+/**
+ * Phase-2 approvals inbox row. Atlas exports its pending-approval store (the
+ * same one the Slack gate reads) into the cockpit JSON so MC can render + resolve
+ * gated dispatch runs. `id` is the Atlas-side run/approval id used by
+ * POST /dispatch/approve. All fields are advisory display data.
+ */
+export interface CockpitPendingApproval {
+  id: string
+  agent: string
+  kind: string
+  summary: string
+  requested_at: string
+  cost_cap_usd: number
+  impact: string
+  reversible: boolean
 }
 
 export interface CockpitExport {
@@ -67,6 +93,7 @@ export interface CockpitExport {
   agent_feed: CockpitFeedEntry[]
   tools: CockpitToolsEntry[]
   conversations: CockpitConversation[]
+  pending_approvals: CockpitPendingApproval[]
 }
 
 export interface CockpitPayload extends CockpitExport {
@@ -90,6 +117,7 @@ export function emptyCockpit(): CockpitPayload {
     agent_feed: [],
     tools: [],
     conversations: [],
+    pending_approvals: [],
     source: 'empty',
   }
 }
@@ -172,15 +200,37 @@ function coerce(raw: Record<string, unknown>): CockpitExport {
   const conversations: CockpitConversation[] = Array.isArray(raw.conversations)
     ? raw.conversations
         .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
-        .map((c) => ({
-          id: asStr(c.id),
-          agent: asStr(c.agent),
-          cost_usd: asNum(c.cost_usd),
-          turns: asNum(c.turns),
-          last_ts: asStr(c.last_ts),
-          title: asStr(c.title),
-        }))
+        .map((c) => {
+          const conv: CockpitConversation = {
+            id: asStr(c.id),
+            agent: asStr(c.agent),
+            cost_usd: asNum(c.cost_usd),
+            turns: asNum(c.turns),
+            last_ts: asStr(c.last_ts),
+            title: asStr(c.title),
+          }
+          if (typeof c.status === 'string') conv.status = c.status
+          if (typeof c.reply === 'string') conv.reply = c.reply
+          if (c.awaiting_approval === true) conv.awaiting_approval = true
+          return conv
+        })
         .filter((c) => c.id)
+    : []
+
+  const pending_approvals: CockpitPendingApproval[] = Array.isArray(raw.pending_approvals)
+    ? raw.pending_approvals
+        .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+        .map((a) => ({
+          id: asStr(a.id),
+          agent: asStr(a.agent),
+          kind: asStr(a.kind, 'action'),
+          summary: asStr(a.summary),
+          requested_at: asStr(a.requested_at),
+          cost_cap_usd: asNum(a.cost_cap_usd),
+          impact: asStr(a.impact, 'unknown'),
+          reversible: a.reversible === true,
+        }))
+        .filter((a) => a.id)
     : []
 
   return {
@@ -190,6 +240,7 @@ function coerce(raw: Record<string, unknown>): CockpitExport {
     agent_feed,
     tools,
     conversations,
+    pending_approvals,
   }
 }
 
