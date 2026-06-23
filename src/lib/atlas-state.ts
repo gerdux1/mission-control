@@ -81,6 +81,9 @@ export interface AgentStateRow {
   has_vps: boolean
   open_items: string[]
   last_checked_at: string | null
+  live: boolean | null
+  last_active_at: string | null
+  activity_source: string | null
 }
 
 export interface AgentStateResult {
@@ -99,6 +102,9 @@ interface RawAgentState {
   deploy_state: string | null
   open_items_json: string | null
   last_checked_at: string | null
+  live: number | null
+  last_active_at: string | null
+  activity_source: string | null
 }
 
 export function readAgentStates(): AgentStateResult {
@@ -108,7 +114,8 @@ export function readAgentStates(): AgentStateResult {
     const raw = db
       .prepare(
         `SELECT agent, vps_head, drift, commits_ahead, session_last_age_hours,
-                deploy_state, open_items_json, last_checked_at
+                deploy_state, open_items_json, last_checked_at,
+                live, last_active_at, activity_source
          FROM agent_state
          WHERE agent IS NOT NULL AND agent != ''
          ORDER BY agent ASC`,
@@ -135,6 +142,9 @@ export function readAgentStates(): AgentStateResult {
         has_vps: Boolean(r.vps_head),
         open_items: openItems,
         last_checked_at: r.last_checked_at,
+        live: r.live === null || r.live === undefined ? null : r.live === 1,
+        last_active_at: r.last_active_at ?? null,
+        activity_source: r.activity_source ?? null,
       }
     })
     return { rows, source: 'atlas-db', lastChecked }
