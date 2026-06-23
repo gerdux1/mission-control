@@ -72,7 +72,7 @@ describe('POST /api/epl/chat — gated dispatch', () => {
     expect(url).toBe('http://atlas.test:18790/dispatch')
     const sent = JSON.parse((init as any).body)
     expect(sent.agent).toBe('james') // lowercased
-    expect(sent.mode).toBe('chat')
+    expect(sent.kind).toBe('chat') // Atlas /dispatch reads `kind`, not `mode`
     expect(sent.thread_id).toBe(body.thread_id)
     expect(sent.prompt).toBe('June margin?')
   })

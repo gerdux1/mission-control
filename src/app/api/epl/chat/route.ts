@@ -67,7 +67,10 @@ export async function POST(request: NextRequest) {
         agent,
         thread_id: threadId,
         prompt: message,
-        mode: 'chat',
+        // Atlas's /dispatch reads `kind` (not `mode`); kind:"chat" marks this a
+        // threaded conversational turn so the exporter groups it by thread_id and
+        // surfaces reply/status/awaiting_approval for the poll route.
+        kind: 'chat',
         requested_by: requestedBy,
       }),
       signal: AbortSignal.timeout(15_000),

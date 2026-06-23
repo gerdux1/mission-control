@@ -67,8 +67,7 @@ export function EplChatPanel() {
 
       // Poll for the reply — ≥3s interval, hard timeout.
       const deadline = Date.now() + POLL_TIMEOUT_MS
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
+      for (;;) {
         if (Date.now() > deadline) {
           pushSystem('Timed out waiting for a reply — the turn may still be running on Atlas.')
           return
