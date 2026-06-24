@@ -523,8 +523,8 @@ function classifyDirectModel(task: DispatchableTask): string {
     return 'claude-haiku-4-5-20251001'
   }
 
-  // Default → Sonnet
-  return 'claude-sonnet-4-6'
+  // Default → Sonnet (claude-sonnet-4-5 confirmed on fleet API key; 4-6 may 500)
+  return 'claude-sonnet-4-5'
 }
 
 function getAgentSoulContent(task: DispatchableTask): string | null {
