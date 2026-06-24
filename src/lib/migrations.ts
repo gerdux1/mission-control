@@ -1505,6 +1505,33 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_attachments_workspace ON task_attachments(workspace_id)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_attachments_type ON task_attachments(type)`)
     }
+  },
+  {
+    id: '053_agent_briefings',
+    up(db: Database.Database) {
+      // Daily consolidated briefings for agents with action items, calendar, and metrics
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS briefings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agent_name TEXT NOT NULL,
+          date TEXT NOT NULL,
+          content TEXT NOT NULL,
+          urgency_items TEXT,
+          calendar_items TEXT,
+          metrics TEXT,
+          slack_message_ts TEXT,
+          slack_channel_id TEXT,
+          posted_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          workspace_id INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(agent_name, date, workspace_id)
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_briefings_agent ON briefings(agent_name, workspace_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date, workspace_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_briefings_posted ON briefings(posted_at)`)
+    }
   }
 ]
 
