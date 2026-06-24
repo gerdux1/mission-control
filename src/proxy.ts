@@ -215,7 +215,18 @@ export function proxy(request: NextRequest) {
     // allowed to pass through proxy auth gate.
     const looksLikeAgentApiKey = /^mca_[a-f0-9]{48}$/i.test(apiKey)
 
-    if (sessionToken || hasValidApiKey || looksLikeAgentApiKey) {
+    // The global API_KEY is a runtime secret that is NOT reliably exposed to
+    // this middleware (it runs in a restricted runtime where process.env is not
+    // fully populated), so `configuredApiKey` can be empty here even when the
+    // server has a key — which made every global-key request 401 at the gate.
+    // When we can't resolve the configured key at the edge, defer verification
+    // to route-level auth (requireRole), which runs in the Node runtime where
+    // process.env.API_KEY IS available and validates the key via safeCompare.
+    // This mirrors the agent-scoped (mca_) passthrough above: the proxy is a
+    // coarse gate, the route is the authority.
+    const deferKeyToRouteAuth = !configuredApiKey && apiKey.length > 0
+
+    if (sessionToken || hasValidApiKey || looksLikeAgentApiKey || deferKeyToRouteAuth) {
       const { response, nonce } = nextResponseWithNonce(request)
       return addSecurityHeaders(response, request, nonce)
     }
