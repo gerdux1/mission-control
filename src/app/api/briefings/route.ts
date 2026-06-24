@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
     const startOfDay = Math.floor(new Date(`${targetDate}T00:00:00Z`).getTime() / 1000);
     const endOfDay = Math.floor(new Date(`${targetDate}T23:59:59Z`).getTime() / 1000);
     const startOfTomorrow = endOfDay + 1;
-    const endOfTomorrow = Math.floor(new Date(new Date(targetDate).getTime() + 86400000).toISOString().split('T')[0] + 'T23:59:59Z').getTime() / 1000);
+    const tomorrowDate = new Date(new Date(targetDate).getTime() + 86400000).toISOString().split('T')[0];
+    const endOfTomorrow = Math.floor(new Date(`${tomorrowDate}T23:59:59Z`).getTime() / 1000);
 
     const todayTasks = db.prepare(`
       SELECT id, title, status, priority, due_date
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
     const countQuery = 'SELECT COUNT(*) as total FROM briefings WHERE workspace_id = ?' +
       (agentName ? ' AND agent_name = ?' : '') +
       (date ? ' AND date = ?' : '');
-    const countParams = [workspaceId];
+    const countParams: any[] = [workspaceId];
     if (agentName) countParams.push(agentName);
     if (date) countParams.push(date);
 

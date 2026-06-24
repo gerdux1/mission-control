@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface Briefing {
   id: number;
@@ -90,16 +89,16 @@ export function BriefingsPanel() {
           <div className="text-center py-8 text-gray-500">No briefings found</div>
         ) : (
           briefings.map(briefing => (
-            <Card key={briefing.id}>
-              <CardHeader>
-                <CardTitle className="flex justify-between items-start">
-                  <span>{briefing.agent_name} — {briefing.date}</span>
+            <div key={briefing.id} className="bg-white border border-gray-200 rounded-lg shadow">
+              <div className="border-b border-gray-200 px-6 py-4">
+                <div className="flex justify-between items-start">
+                  <h3 className="text-lg font-semibold">{briefing.agent_name} — {briefing.date}</h3>
                   <span className="text-sm font-normal text-gray-500">
                     {briefing.posted_at ? '✓ Posted' : 'Draft'}
                   </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                </div>
+              </div>
+              <div className="px-6 py-4 space-y-4">
                 {/* Urgent Items */}
                 {briefing.urgency_items && briefing.urgency_items.length > 0 && (
                   <div>
@@ -166,8 +165,8 @@ export function BriefingsPanel() {
                     Posted: {formatDate(briefing.posted_at)}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))
         )}
       </div>
