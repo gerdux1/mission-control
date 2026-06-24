@@ -62,6 +62,8 @@ function ageHoursFromActionTs(ts: string | null): number | null {
   return Math.max(0, (Date.now() - d.getTime()) / 3_600_000)
 }
 
+const ALWAYS_ON_AGENTS = new Set(['sofia', 'james', 'aria', 'victoria', 'atlas', 'iris'])
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const part = url.searchParams.get('part')
@@ -100,18 +102,40 @@ export async function GET(req: NextRequest) {
     const st = stateMap.get(a.name)
     if (st) {
       const checked = formatAge(st.last_checked_at)
-      row = {
-        ...row,
-        status: (st.drift || st.commits_ahead > 0 ? 'review' : 'ok') as AgentRow['status'],
-        last_action: st.last_checked_at ?? row.last_action,
-        headline: st.commits_ahead > 0
-          ? `${st.commits_ahead} commit${st.commits_ahead === 1 ? '' : 's'} ahead of VPS${st.drift ? ' · drift' : ''} · checked ${checked}`
-          : st.drift
-            ? `drift vs VPS · checked ${checked}`
-            : st.has_vps
-              ? `in sync · checked ${checked}`
-              : `local-only · checked ${checked}`,
-        stats_source: 'live' as const,
+      if (st.live !== null) {
+        // Atlas sync-mc liveness (refreshed every ~2 min) is the freshest, most
+        // honest signal: does the agent's service/pm2/logs show recent activity?
+        // This replaces the old git-only headline that wrongly read "local-only"
+        // for every agent (Atlas-on-VPS can't compute Mac↔VPS drift).
+        const activeAge = formatAge(st.last_active_at)
+        const src = st.activity_source && st.activity_source !== 'unknown' ? ` (${st.activity_source})` : ''
+        const ahead = st.commits_ahead > 0 ? `${st.commits_ahead} commit${st.commits_ahead === 1 ? '' : 's'} ahead · ` : ''
+        const downAlwaysOn = !st.live && ALWAYS_ON_AGENTS.has(a.name)
+        row = {
+          ...row,
+          status: (st.live ? (st.commits_ahead > 0 ? 'review' : 'ok') : (downAlwaysOn ? 'offline' : 'ok')) as AgentRow['status'],
+          last_action: st.last_active_at ?? st.last_checked_at ?? row.last_action,
+          headline: st.live
+            ? `${ahead}live${src} · active ${activeAge} · checked ${checked}`
+            : downAlwaysOn
+              ? `${ahead}⚠ DOWN · last active ${activeAge} · checked ${checked}`
+              : `${ahead}deployed · idle ${activeAge} · checked ${checked}`,
+          stats_source: 'live' as const,
+        }
+      } else {
+        row = {
+          ...row,
+          status: (st.drift || st.commits_ahead > 0 ? 'review' : 'ok') as AgentRow['status'],
+          last_action: st.last_checked_at ?? row.last_action,
+          headline: st.commits_ahead > 0
+            ? `${st.commits_ahead} commit${st.commits_ahead === 1 ? '' : 's'} ahead of VPS${st.drift ? ' · drift' : ''} · checked ${checked}`
+            : st.drift
+              ? `drift vs VPS · checked ${checked}`
+              : st.has_vps
+                ? `in sync · checked ${checked}`
+                : `local-only · checked ${checked}`,
+          stats_source: 'live' as const,
+        }
       }
     }
 
