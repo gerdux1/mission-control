@@ -1192,6 +1192,17 @@ export async function requeueStaleTasks(): Promise<{ ok: boolean; message: strin
 export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: string }> {
   const db = getDatabase()
 
+  // Scope guard (#342 arming): only auto-dispatch tasks DELIBERATELY meant for
+  // an agent — those tagged "auto" OR in an allowlisted project
+  // (MC_AUTODISPATCH_PROJECTS, comma-separated ids). This keeps the raw
+  // email-ingestion inbox (invoices, notifications, legal/security items) from
+  // ever auto-running. Empty allowlist → only the "auto" tag qualifies.
+  const autoProjectIds = (process.env.MC_AUTODISPATCH_PROJECTS || '')
+    .split(',').map(s => s.trim()).filter(s => /^\d+$/.test(s))
+  const scopeClauses = ["t.tags LIKE '%\"auto\"%'"]
+  if (autoProjectIds.length) scopeClauses.push(`t.project_id IN (${autoProjectIds.join(',')})`)
+  const scopeSql = `AND (${scopeClauses.join(' OR ')})`
+
   const tasks = db.prepare(`
     SELECT t.*, a.name as agent_name, a.id as agent_id, a.config as agent_config,
            p.ticket_prefix, t.project_ticket_no
@@ -1200,6 +1211,7 @@ export async function dispatchAssignedTasks(): Promise<{ ok: boolean; message: s
     LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
     WHERE t.status = 'assigned'
       AND t.assigned_to IS NOT NULL
+      ${scopeSql}
     ORDER BY
       CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END ASC,
       t.created_at ASC
