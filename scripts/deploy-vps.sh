@@ -76,3 +76,8 @@ echo "✓ Deployed ${SHORT} (recorded in ${REPO_DIR}/.deployed-sha)"
 
 # Keep only the 3 most recent build dirs.
 ls -1dt "${BUILD_ROOT}"/*/ 2>/dev/null | tail -n +4 | xargs -r rm -rf || true
+
+# Reclaim Docker build cache beyond 2GB so disk does not creep (VPS is disk-bound).
+# Keeps recent cache for fast rebuilds; prunes the rest. Added 30 Jun 2026.
+docker builder prune -f --keep-storage 2GB >/dev/null 2>&1 || true
+echo "✓ build cache pruned (kept 2GB)"

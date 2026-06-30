@@ -4,9 +4,10 @@
  * EPL Projects Panel — v0.2 real React.
  *
  * 6-col Kanban that replaces Asana for the agent fleet (Wk4 target).
- * - Cards drag-droppable across columns (local state; server persistence TODO
- *   when the MC tasks table is wired — that's the data-wiring pass).
- * - Click card → expand inline drawer with cross-links + Ask Claude / Ask ChatGPT.
+ * - Cards drag-droppable across columns (local state; server persistence via PUT /api/tasks/[id]).
+ * - Click card → expand inline drawer with task detail + attachments + comments.
+ * - "Do with Claude Code" button: opens task context for Claude Code (with MC MCP, agents poll tasks automatically).
+ * - Agent pattern: register MC MCP, poll /api/tasks?assigned_to=<name>&status=assigned, call mc_update_task() to sync.
  */
 
 import { useEffect, useState, useCallback } from 'react'
@@ -126,18 +127,20 @@ const COLUMN_TO_STATUS: Record<string, string> = {
   done_this_week: 'done',
 }
 
-/** Build a contextual prompt from a card for an assistant hand-off. */
+/** Build a contextual prompt from a card for Claude Code execution. */
 function cardPrompt(card: Card, colLabel: string) {
   return [
-    `Project ticket from Mission Control (EPL agent fleet):`,
+    `📋 Mission Control Task — Ready to Execute`,
     ``,
     `• Title: ${card.title}`,
     `• Owner: ${card.owner}`,
-    `• Status column: ${colLabel}`,
+    `• Status: ${colLabel}`,
     `• Tags: ${card.tags.join(', ') || '—'}`,
-    `• Card id: ${card.id}`,
+    `• Card ID: ${card.id}`,
     ``,
-    `Help me move this forward — give me the concrete next steps and anything I should watch out for.`,
+    `You have MC MCP registered. Fetch full task details with mc_get_task(${card.id}), review attachments/comments, execute the work, then call mc_update_task(${card.id}, {status: 'in_progress', comment: '...'}) when starting and {status: 'done', comment: '...'} when complete.`,
+    ``,
+    `Start by reading the full task detail to confirm scope.`,
   ].join('\n')
 }
 
@@ -374,8 +377,8 @@ function TaskDetail({
     <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-700 space-y-3" onClick={(e) => e.stopPropagation()}>
       {/* Action bar */}
       <div className="flex gap-2 flex-wrap">
-        <button onClick={() => onAsk('claude')} className="px-2 py-1 rounded bg-slate-900 text-white text-xs hover:bg-slate-700">✦ Ask Claude</button>
-        <button onClick={() => onAsk('chatgpt')} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-500">⌁ Ask ChatGPT</button>
+        <button onClick={() => onAsk('claude')} className="px-2 py-1 rounded bg-slate-900 text-white text-xs hover:bg-slate-700">⚙ Do with Claude Code</button>
+        <button onClick={() => onAsk('chatgpt')} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs hover:bg-emerald-500">⌁ Chat (ChatGPT)</button>
         {cardTags.includes('maintenance') && (
           <button onClick={() => onNav('/maintenance')} className="px-2 py-1 rounded bg-orange-100 text-orange-800 text-xs">→ Maintenance</button>
         )}

@@ -67,6 +67,19 @@ interface TodayData {
   kpis: Kpi[]
   waitingOnYou: WaitingItem[]
   waiting_source?: string
+  maintenanceHolds?: {
+    blocked_count: number
+    open_total: number
+    guardrail: string
+    top: Array<{
+      property_id: string
+      max_severity: string
+      open_count: number
+      categories: string[]
+      pricing_action: string
+      upsell_action: string
+    }>
+  } | null
 }
 
 const AGENT_EMOJI: Record<string, string> = {
@@ -276,6 +289,45 @@ export function EplTodayPanel() {
           ))}
         </div>
       </section>
+
+      {/* Pricing / upsell holds — cross-agent maintenance-block signal (ADVISORY) */}
+      {data.maintenanceHolds && data.maintenanceHolds.blocked_count > 0 && (
+        <section>
+          <h2 className="text-xs uppercase tracking-wide text-slate-500 mb-2">
+            ⛔ Pricing / upsell holds <span className="text-slate-400 normal-case">· advisory · {data.maintenanceHolds.blocked_count} of {data.maintenanceHolds.open_total} open</span>
+          </h2>
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl overflow-hidden">
+            <div className="px-4 py-2 text-xs text-rose-700 border-b border-rose-100">
+              Properties with urgent (P0/P1) maintenance. Suggested: Aria holds peak pricing, Iris suppresses upsells.
+              <span className="opacity-70"> Advisory only — no price or guest message is changed automatically.</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-rose-100/50 text-rose-900">
+                <tr>
+                  <th className="text-left px-4 py-1.5 font-medium">property</th>
+                  <th className="text-left px-4 py-1.5 font-medium">sev</th>
+                  <th className="text-left px-4 py-1.5 font-medium">open</th>
+                  <th className="text-left px-4 py-1.5 font-medium">categories</th>
+                  <th className="text-left px-4 py-1.5 font-medium">advisory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rose-100">
+                {data.maintenanceHolds.top.map((b) => (
+                  <tr key={b.property_id}>
+                    <td className="px-4 py-1.5 font-medium text-slate-800">{b.property_id}</td>
+                    <td className="px-4 py-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${b.max_severity === 'P0' ? 'bg-rose-200 text-rose-900' : 'bg-amber-100 text-amber-800'}`}>{b.max_severity}</span>
+                    </td>
+                    <td className="px-4 py-1.5 tabular-nums">{b.open_count}</td>
+                    <td className="px-4 py-1.5 text-xs text-slate-500 truncate max-w-[220px]">{b.categories.join(', ')}</td>
+                    <td className="px-4 py-1.5 text-xs text-slate-600">hold-peak · suppress-upsell</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* Waiting on you */}
       <section>
