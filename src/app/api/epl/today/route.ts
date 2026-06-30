@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readPendingApprovals } from '@/lib/atlas-approvals'
 import { getMaintenanceSummary, maintenanceKpi } from '@/lib/maintenance-summary'
+import { readMaintenanceSignal } from '@/lib/atlas-maintenance-signal'
 import {
   readAgentStates,
   readLatestKpis,
@@ -108,8 +109,18 @@ export async function GET(req: NextRequest) {
   const agents_source = agentState.source
 
   // ── KPIs ──────────────────────────────────────────────────────────────
-  // [0] maintenance (live Hugo, real)
-  const maintenanceCard = maintenanceKpi(maintenance)
+  // [0] maintenance — REAL, from MC's own maintenance tasks via the cross-agent
+  // signal export (mc_maintenance_signal.py). Falls back to the Hugo summary.
+  const maintSignal = await readMaintenanceSignal()
+  const maintenanceCard: Kpi = maintSignal
+    ? {
+        label: 'Maintenance',
+        value: `${maintSignal.open_total} open`,
+        delta: `${maintSignal.by_severity?.['P0'] ?? 0} P0 · ${maintSignal.blocked_count} property holds`,
+        stale: false,
+        source: 'maintenance_signal',
+      }
+    : maintenanceKpi(maintenance)
 
   // [1] cash runway / position from kpi_snapshots (flag staleness honestly)
   const cash = kpiSnap.byKey['cash_position_gbp'] ?? kpiSnap.byKey['cash_runway_days']
@@ -175,6 +186,15 @@ export async function GET(req: NextRequest) {
     kpis,
     waitingOnYou,
     waiting_source,
+    // Cross-agent maintenance-block signal (ADVISORY — Aria/Iris/human decide).
+    maintenanceHolds: maintSignal
+      ? {
+          blocked_count: maintSignal.blocked_count,
+          open_total: maintSignal.open_total,
+          guardrail: maintSignal.guardrail,
+          top: maintSignal.blocked_properties.slice(0, 8),
+        }
+      : null,
   }
 
   if (part === 'actions') return NextResponse.json({ generatedAt: enriched.generatedAt, actions, actions_source })
