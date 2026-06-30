@@ -30,6 +30,7 @@ const navGroups: NavGroup[] = [
     id: 'core',
     items: [
       { id: 'overview', label: 'Overview', icon: <OverviewIcon />, priority: true, essential: true },
+      { id: 'entities', label: 'Entities', icon: <span className="text-base leading-none">🏢</span>, priority: true, essential: true },
       { id: 'agents', label: 'Agents', icon: <AgentsIcon />, priority: true, essential: true },
       { id: 'tasks', label: 'Tasks', icon: <TasksIcon />, priority: true, essential: true },
       { id: 'chat', label: 'Chat', icon: <ChatIcon />, priority: false, essential: true },
