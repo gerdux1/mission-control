@@ -33,6 +33,27 @@ git fetch origin --quiet
 SHA="$(git rev-parse --verify "${REF}^{commit}")"
 SHORT="${SHA:0:9}"
 
+# ── No-revert guard (added 30 Jun 2026) ──────────────────────────────────────
+# Refuse to deploy a ref that does NOT contain the currently-live commit — doing
+# so silently REVERTS whatever is live (the multi-session deploy ping-pong bug
+# that reverted three sessions' work on 30 Jun). Fail-closed: if we cannot prove
+# the new ref is a clean forward step, abort and name the commits that would be
+# lost. To roll back deliberately, set ALLOW_REVERT=1.
+LIVE_SHA="$(tr -d '[:space:]' < "$REPO_DIR/.deployed-sha" 2>/dev/null)"
+if [ -n "$LIVE_SHA" ] && [ "$LIVE_SHA" != "$SHA" ]; then
+  if git merge-base --is-ancestor "$LIVE_SHA" "$SHA" 2>/dev/null; then
+    : # live is an ancestor of the new ref → clean forward, proceed
+  elif [ "${ALLOW_REVERT:-0}" = "1" ]; then
+    echo "⚠ ALLOW_REVERT=1 — deploying ${SHORT} although it does not contain live ${LIVE_SHA:0:9}"
+  else
+    echo "✋ ABORT: ${REF} (${SHORT}) does NOT contain the live commit ${LIVE_SHA:0:9}." >&2
+    echo "   Deploying it would REVERT these live commit(s):" >&2
+    git log --oneline "${SHA}..${LIVE_SHA}" 2>/dev/null | sed 's/^/      /' >&2
+    echo "   → Reconcile (merge the lineages) first, or set ALLOW_REVERT=1 to roll back on purpose." >&2
+    exit 1
+  fi
+fi
+
 BUILD_ROOT="${MC_BUILD_DIR:-/opt/mc-build}"
 BUILD_DIR="${BUILD_ROOT}/${SHORT}"
 echo "▶ Deploying ${PROJECT} @ ${REF} (${SHORT}) from the committed tree"
@@ -76,3 +97,8 @@ echo "✓ Deployed ${SHORT} (recorded in ${REPO_DIR}/.deployed-sha)"
 
 # Keep only the 3 most recent build dirs.
 ls -1dt "${BUILD_ROOT}"/*/ 2>/dev/null | tail -n +4 | xargs -r rm -rf || true
+
+# Reclaim Docker build cache beyond 2GB so disk does not creep (VPS is disk-bound).
+# Keeps recent cache for fast rebuilds; prunes the rest. Added 30 Jun 2026.
+docker builder prune -f --keep-storage 2GB >/dev/null 2>&1 || true
+echo "✓ build cache pruned (kept 2GB)"

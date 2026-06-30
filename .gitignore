@@ -52,3 +52,11 @@ HETZNER_PRODUCTION.md
 
 # local Claude Code config (machine-specific)
 .claude/
+.env.bak*
+gateway-state/
+gateway-state-v2/
+.deploy-log
+.deployed-sha
+*.bak
+*.bak.*
+run-gateway.sh
