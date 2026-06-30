@@ -80,19 +80,23 @@ export function EplTodayPanel() {
   const [data, setData] = useState<TodayData | null>(null)
   const [brief, setBrief] = useState<string | null>(null)
   const [briefOpen, setBriefOpen] = useState(false)
+  const [sofiaBrief, setSofiaBrief] = useState<{ markdown: string | null; postedAt: string | null } | null>(null)
+  const [sofiaOpen, setSofiaOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [todayRes, briefRes] = await Promise.all([
+      const [todayRes, briefRes, sofiaRes] = await Promise.all([
         fetch('/api/epl/today', { cache: 'no-store' }),
         fetch('/api/epl/atlas-brief?format=markdown', { cache: 'no-store' }),
+        fetch('/api/epl/sofia-brief', { cache: 'no-store' }),
       ])
       if (!todayRes.ok) throw new Error(`HTTP ${todayRes.status}`)
       setData(await todayRes.json())
       if (briefRes.ok) setBrief(await briefRes.text())
+      if (sofiaRes.ok) { const s = await sofiaRes.json(); setSofiaBrief(s.markdown ? { markdown: s.markdown, postedAt: s.postedAt } : null) }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'unknown error')
     } finally {
@@ -173,6 +177,26 @@ export function EplTodayPanel() {
           </button>
           {briefOpen && (
             <pre className="px-4 py-3 text-xs text-violet-950 bg-white/60 border-t border-violet-200 whitespace-pre-wrap font-mono leading-relaxed">{brief}</pre>
+          )}
+        </section>
+      )}
+
+      {/* Sofia / EA morning briefing widget (posted to Slack #sofia, mirrored here) */}
+      {sofiaBrief?.markdown && (
+        <section className="bg-amber-50 border border-amber-200 rounded-2xl">
+          <button onClick={() => setSofiaOpen(o => !o)} className="w-full px-4 py-3 text-left flex items-center gap-3">
+            <span className="text-2xl">📨</span>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-amber-900">Sofia morning briefing</div>
+              <div className="text-xs text-amber-700">
+                {sofiaOpen ? 'Click to collapse' : 'Action items · calendar · email triage · fleet overnight'}
+                {sofiaBrief.postedAt ? ` · ${new Date(sofiaBrief.postedAt).toLocaleString('en-GB')}` : ''}
+              </div>
+            </div>
+            <span className="text-xs text-amber-700">{sofiaOpen ? '▾' : '▸'}</span>
+          </button>
+          {sofiaOpen && (
+            <pre className="px-4 py-3 text-xs text-amber-950 bg-white/60 border-t border-amber-200 whitespace-pre-wrap font-mono leading-relaxed">{sofiaBrief.markdown}</pre>
           )}
         </section>
       )}
