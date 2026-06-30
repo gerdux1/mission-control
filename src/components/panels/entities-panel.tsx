@@ -5,7 +5,8 @@
  *
  * Surfaces EPL / Urban Ready / Staylio / NourNest as first-class objects:
  * identity, role, rules & boundaries (prohibited activities, who-signs-with,
- * dependency rules) and the inter-company R2R supply-chain map.
+ * dependency rules), outbound links (website + Companies House) and the
+ * inter-company R2R supply-chain map.
  *
  * v1 data is the canonical structure (memory: reference_four_company_structure_v1).
  * SINGLE SOURCE OF TRUTH = the Entity Registry sheet
@@ -18,11 +19,17 @@
 
 import { useState } from 'react'
 
+const REGISTRY_URL =
+  'https://docs.google.com/spreadsheets/d/1UnU4TdSKqgmR0NbXyscrBHSj_6yqKZQum7Qyn4i1vhE/edit'
+const ch = (coNumber: string) =>
+  `https://find-and-update.company-information.service.gov.uk/company/${coNumber}`
+
 interface Entity {
   key: string
   name: string
   legal: string
   coNumber: string
+  website: string
   director: string
   accountant: string
   vat: string
@@ -42,6 +49,7 @@ const STRUCTURE: Entity[] = [
     name: 'EPL',
     legal: 'London Elite Rental Management Ltd',
     coNumber: '15197659',
+    website: 'https://elitepropertylondon.co.uk',
     director: 'Gerda Micke (100%)',
     accountant: 'Tax Express (Donara)',
     vat: 'VAT-exempt (residential rent)',
@@ -58,6 +66,7 @@ const STRUCTURE: Entity[] = [
     name: 'Urban Ready',
     legal: 'Urban Residential Services Ltd',
     coNumber: '16964587',
+    website: 'https://urbanready.co.uk',
     director: 'Lukasz Kukulski (100%)',
     accountant: 'XPlus London (Abdul)',
     vat: 'VAT-exempt (services only)',
@@ -74,6 +83,7 @@ const STRUCTURE: Entity[] = [
     name: 'Staylio',
     legal: 'Staylio Limited',
     coNumber: '17012831',
+    website: 'https://staylio.london',
     director: 'Kris Kamasinski (→100%)',
     accountant: 'DNS Tax (Owais)',
     vat: 'VAT-registered · TOMS margin',
@@ -90,6 +100,7 @@ const STRUCTURE: Entity[] = [
     name: 'NourNest',
     legal: 'NourNest Ltd',
     coNumber: '16629708',
+    website: 'https://nournestapartments.com',
     director: 'Gerda Micke (100%)',
     accountant: 'Tax Express',
     vat: 'Standard VAT (0% if <£90k)',
@@ -111,6 +122,20 @@ function Chip({ label, tone }: { label: string; tone: 'bad' | 'ok' | 'muted' }) 
       ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
       : 'bg-muted text-muted-foreground border-border'
   return <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border ${cls}`}>{label}</span>
+}
+
+function LinkChip({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(ev) => ev.stopPropagation()}
+      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+    >
+      {label} <span aria-hidden>↗</span>
+    </a>
+  )
 }
 
 function FlowMap() {
@@ -163,13 +188,17 @@ export function EntitiesPanel() {
                 onClick={() => setOpen(isOpen ? null : e.key)}
                 className="w-full text-left p-4 flex items-start justify-between gap-3 hover:bg-muted/40 transition-colors"
               >
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ background: e.accent }} />
                     <span className="font-semibold text-base">{e.name}</span>
                     <span className="text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground">{e.layer}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">{e.legal} · Co. {e.coNumber}</div>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <LinkChip href={e.website} label="Website" />
+                    <LinkChip href={ch(e.coNumber)} label="Companies House" />
+                  </div>
                 </div>
                 <span className="text-muted-foreground text-sm mt-1">{isOpen ? '−' : '+'}</span>
               </button>
@@ -212,7 +241,9 @@ export function EntitiesPanel() {
 
       <p className="text-[11px] text-muted-foreground mt-5">
         Inter-company commercial terms (recharge / supply pricing) are set by Gerda — this view renders the structure, it does not set terms.
-        Source of truth: Entity Registry sheet. Static snapshot v1; live registry sync to follow.
+        Source of truth:{' '}
+        <a href={REGISTRY_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Entity Registry sheet</a>.
+        Static snapshot v1; live registry sync to follow.
       </p>
     </div>
   )
