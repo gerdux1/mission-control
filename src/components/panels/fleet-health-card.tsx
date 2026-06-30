@@ -39,6 +39,8 @@ interface Health {
     swap_used_mb: number
     orphan_browsers: number
     load1: string
+    docker_build_cache_gb?: number
+    docker_images_gb?: number
   }
   real: boolean
 }
@@ -134,6 +136,12 @@ export function FleetHealthCard() {
         <span>🔀 swap {host.swap_used_mb} MB</span>
         <span>📈 load {host.load1}</span>
         <span className={host.orphan_browsers > 0 ? TEXT.warn : ''}>🕸 {host.orphan_browsers} orphan{host.orphan_browsers === 1 ? '' : 's'}</span>
+        {host.docker_build_cache_gb != null && (
+          <span className={host.docker_build_cache_gb >= 6 ? TEXT.warn : ''}>
+            🐳 cache {host.docker_build_cache_gb}GB
+            {host.docker_images_gb != null && <span className="opacity-70"> · images {host.docker_images_gb}GB</span>}
+          </span>
+        )}
       </footer>
     </div>
   )
