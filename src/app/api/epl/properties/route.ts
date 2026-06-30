@@ -22,8 +22,21 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { readFileSync } from 'node:fs'
+import { hugoStatsUrl } from '@/lib/maintenance-summary'
 
 type HeatState = 'hot' | 'warm' | 'neutral' | 'cool' | 'cold'
+
+// EPL "brain" (Supabase) — canonical property list, BOOM-sourced. Same creds as /api/epl/org.
+const BRAIN_URL = process.env.EPL_BRAIN_URL || process.env.SUPABASE_URL || 'https://blcbvrxssmyqtxemmzzl.supabase.co'
+const BRAIN_KEY = process.env.EPL_BRAIN_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+
+function brandOf(entity: string | null): Tile['brand'] {
+  const e = (entity || '').toLowerCase().replace(/\s+/g, '')
+  if (e.includes('staylio')) return 'Staylio'
+  if (e.includes('nournest')) return 'NourNest'
+  if (e.includes('urban')) return 'UrbanReady'
+  return 'EPL'
+}
 
 interface Tile {
   canonical_id: string
@@ -61,22 +74,90 @@ interface LoadResult {
   real: boolean
 }
 
-function loadData(): LoadResult {
+interface BrainProp {
+  canonical_id: string | null
+  nickname: string | null
+  display_name: string | null
+  bedrooms: number | null
+  beds: number | null
+  entity: string | null
+  status: string | null
+  bdc_review_score: number | null
+  is_umbrella: boolean | null
+  active_flag: boolean | null
+}
+
+/** Open maintenance tickets per canonical property, from Hugo (live). Empty on failure. */
+async function hugoOpenByProperty(): Promise<Map<string, number>> {
+  const url = (process.env.HUGO_TICKETS_URL || hugoStatsUrl().replace('/api/stats', '/api/tickets'))
+  const m = new Map<string, number>()
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 4000)
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+    clearTimeout(t)
+    if (res.ok) {
+      const d = await res.json()
+      for (const tk of d.tickets ?? []) {
+        const k = String(tk.property_id ?? '')
+        if (k) m.set(k, (m.get(k) ?? 0) + 1)
+      }
+    }
+  } catch { /* Hugo offline → no ticket counts */ }
+  return m
+}
+
+/** All canonical flats from the brain (BOOM-sourced), excluding umbrella parents. */
+async function fetchBrainTiles(): Promise<Tile[] | null> {
+  if (!BRAIN_KEY) return null
+  try {
+    const sel = 'canonical_id,nickname,display_name,bedrooms,beds,entity,status,bdc_review_score,is_umbrella,active_flag'
+    const res = await fetch(`${BRAIN_URL}/rest/v1/properties?select=${sel}&order=nickname.asc`, {
+      headers: { apikey: BRAIN_KEY, Authorization: `Bearer ${BRAIN_KEY}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const rows = (await res.json()) as BrainProp[]
+    const tickets = await hugoOpenByProperty()
+    return rows
+      .filter(r => !r.is_umbrella && (r.active_flag ?? true))
+      .map((r): Tile => {
+        const id = r.canonical_id || r.nickname || 'UNKNOWN'
+        const status: Tile['status'] = (r.status || '').toLowerCase() === 'archived' ? 'archived'
+          : (r.status || '').toLowerCase() === 'onboarding' ? 'onboarding' : 'live'
+        const open = tickets.get(id) ?? null
+        return {
+          canonical_id: id,
+          display_name: r.display_name || r.nickname || id,
+          beds: r.bedrooms ?? r.beds ?? null,
+          brand: brandOf(r.entity),
+          heat: open != null && open >= 3 ? 'cool' : 'neutral',
+          occupancy_30d: null,
+          net_margin_30d: null,
+          guest_score: r.bdc_review_score ?? null,
+          open_tickets: open,
+          status,
+        }
+      })
+  } catch {
+    return null
+  }
+}
+
+async function loadData(): Promise<LoadResult> {
+  // 1. Brain (live, canonical, BOOM-sourced) — the real full portfolio.
+  const brain = await fetchBrainTiles()
+  if (brain && brain.length > 0) {
+    return { tiles: brain, real: true, generatedAt: new Date().toISOString(), sources: { ...REAL_SOURCES, registry: 'Supabase brain properties (BOOM-sourced)', open_tickets: 'Hugo /api/tickets (live)' } }
+  }
+  // 2. Atlas exporter file fallback.
   try {
     const raw = JSON.parse(readFileSync(REAL_PATH, 'utf8'))
     if (Array.isArray(raw.tiles) && raw.tiles.length > 0) {
-      return {
-        tiles: raw.tiles as Tile[],
-        as_of: raw.as_of,
-        sources: raw.sources,
-        counts: raw.counts,
-        generatedAt: raw.generatedAt,
-        real: true,
-      }
+      return { tiles: raw.tiles as Tile[], as_of: raw.as_of, sources: raw.sources, counts: raw.counts, generatedAt: raw.generatedAt, real: true }
     }
-  } catch {
-    // fall through to mock
-  }
+  } catch { /* fall through */ }
+  // 3. Honest mock fallback.
   return { tiles: MOCK_TILES, real: false }
 }
 
@@ -100,7 +181,7 @@ function callouts(tiles: Tile[]) {
 }
 
 export async function GET(req: NextRequest) {
-  const { tiles, as_of, sources, counts, generatedAt, real } = loadData()
+  const { tiles, as_of, sources, counts, generatedAt, real } = await loadData()
   const url = new URL(req.url)
   const part = url.searchParams.get('part')
 
