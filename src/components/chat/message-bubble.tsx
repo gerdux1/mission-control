@@ -164,7 +164,31 @@ export function MessageBubble({ message, isHuman, isGrouped }: MessageBubbleProp
   const isHandoff = message.message_type === 'handoff'
   const isCommand = message.message_type === 'command'
   const isToolCall = message.message_type === 'tool_call'
+  const isStatus = message.message_type === 'status'
   const theme = getAgentTheme(message.from_agent)
+
+  // Transient status lines (live dispatch progress, run failed/rejected). Shown
+  // as a centered pill so they read as ephemeral state, not a chat reply.
+  if (isStatus) {
+    const statusKind = String(asRecord(message.metadata).status || '')
+    const isProblem = statusKind === 'error' || statusKind === 'rejected'
+    return (
+      <div className="flex justify-center my-1.5">
+        <div
+          className={`flex items-center gap-1.5 text-[11px] px-3 py-1 rounded-full border ${
+            isProblem
+              ? 'text-red-400/90 bg-red-500/5 border-red-500/20'
+              : 'text-muted-foreground/70 bg-surface-1 border-border/30'
+          }`}
+        >
+          {statusKind === 'progress' && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" />
+          )}
+          <span className="truncate max-w-[280px]">{message.content}</span>
+        </div>
+      </div>
+    )
+  }
 
   if (isSystem) {
     return (

@@ -86,8 +86,25 @@ async function handle(request: NextRequest): Promise<NextResponse> {
         { status: 'rejected', dispatchId },
         workspaceId,
       )
+    } else if (status === 'progress') {
+      // Live interim progress from Atlas during a run (e.g. "⚙️ Edit · step 3").
+      // Written as a transient 'status' message + broadcast over SSE so the
+      // thread shows movement between "On it…" and the final reply. Atlas caps
+      // the count per run (≤ ATLAS_DISPATCH_MAX_PROGRESS), so MC just renders.
+      const note = String(payload.note || '').trim()
+      if (note) {
+        writeReply(
+          conversationId,
+          agent,
+          note.slice(0, 280),
+          'status',
+          { status: 'progress', dispatchId },
+          workspaceId,
+        )
+      }
+      // empty note → quiet ack (treated like a heartbeat).
     } else if (status === 'in_progress' || status === 'running') {
-      // Progress ping — stay quiet to avoid thread noise; just ack.
+      // Coarse start/stop ping — stay quiet to avoid thread noise; just ack.
     } else {
       return NextResponse.json({ error: `unknown status '${status}'` }, { status: 400 })
     }
