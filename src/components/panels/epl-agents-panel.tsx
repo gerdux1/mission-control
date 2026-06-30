@@ -8,7 +8,7 @@
  * /api/epl/agents/[name]). Tailwind only.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, type ReactNode } from 'react'
 
 interface AgentRow {
   name: string
@@ -159,14 +159,66 @@ export function EplAgentsPanel() {
               </div>
               {!drawer && <div className="text-sm text-slate-500">Loading per-agent stats…</div>}
               {drawer?.error && <div className="text-rose-700">Error: {drawer.error}</div>}
-              {drawer && !drawer.error && (
+              {drawer && !drawer.error && (() => {
+                const m = drawer.manifest as null | {
+                  role?: string; owner?: string; phase?: string; runtime?: string; verb?: string
+                  capabilities?: string[]
+                  key_files?: { own?: string[]; shared?: string[] }
+                  how_it_runs?: { services?: string[]; timers?: string[]; cron_files?: string[] }
+                  kpis?: string[]; shipped_recent?: string[]; blocked?: string[]; next?: string[]
+                }
+                const chips = (items: string[] | undefined, cls: string) =>
+                  (items && items.length)
+                    ? <div className="flex flex-wrap gap-1.5">{items.map((x, i) => <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${cls}`}>{x}</span>)}</div>
+                    : <div className="text-xs text-slate-400">—</div>
+                const list = (items: string[] | undefined) =>
+                  (items && items.length)
+                    ? <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">{items.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                    : <div className="text-xs text-slate-400">—</div>
+                const Section = ({ title, children }: { title: string; children: ReactNode }) =>
+                  <div className="space-y-1.5"><h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</h3>{children}</div>
+                return (
                 <>
-                  <div className="text-xs text-slate-500">Stats source: <span className={drawer.stats_source === 'live' ? 'text-emerald-700' : 'text-slate-400'}>{drawer.stats_source}</span></div>
-                  <div className="text-xs text-slate-500">ROADMAP age: {drawer.roadmap_age_days ?? 'n/a'} days</div>
-                  {drawer.stats_url && <div className="text-xs text-slate-400">URL: <code>{drawer.stats_url}</code></div>}
-                  <pre className="text-xs bg-slate-50 rounded-lg p-3 overflow-auto">{JSON.stringify(drawer.stats, null, 2)}</pre>
+                  {m ? (
+                    <div className="space-y-4">
+                      {/* Identity */}
+                      <div className="space-y-1">
+                        {m.role && <div className="text-sm font-medium text-slate-800">{m.role}</div>}
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.phase && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">{m.phase}</span>}
+                          {m.verb && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">verb: {m.verb}</span>}
+                        </div>
+                        <div className="text-xs text-slate-500">{m.owner && <>Owner: {m.owner}</>}{m.runtime && <> · {m.runtime}</>}</div>
+                      </div>
+                      <Section title="Synced with / capabilities">{chips(m.capabilities, 'bg-cyan-100 text-cyan-800')}</Section>
+                      <Section title="Key files — own">{chips(m.key_files?.own, 'bg-emerald-50 text-emerald-700 font-mono')}</Section>
+                      <Section title="Key files — shared">{chips(m.key_files?.shared, 'bg-amber-50 text-amber-700 font-mono')}</Section>
+                      <Section title="How it runs">
+                        {chips([
+                          ...(m.how_it_runs?.services ?? []),
+                          ...(m.how_it_runs?.timers ?? []),
+                          ...(m.how_it_runs?.cron_files ?? []).map(c => `cron:${c}`),
+                        ], 'bg-slate-100 text-slate-700 font-mono')}
+                      </Section>
+                      <Section title="KPIs">{list(m.kpis)}</Section>
+                      <Section title="Recently shipped">{list(m.shipped_recent)}</Section>
+                      {m.blocked && m.blocked.length > 0 && <Section title="Blocked">{list(m.blocked)}</Section>}
+                      <Section title="Next">{list(m.next)}</Section>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">
+                      Manifest not available yet — Atlas writes <code>/atlas-data/mc_agents_manifest.json</code> every 30 min.
+                    </div>
+                  )}
+
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-slate-400 hover:text-slate-600">Raw stats / heartbeat (source: {drawer.stats_source}, ROADMAP age {drawer.roadmap_age_days ?? 'n/a'}d)</summary>
+                    {drawer.stats_url && <div className="text-xs text-slate-400 mt-1">URL: <code>{drawer.stats_url}</code></div>}
+                    <pre className="text-xs bg-slate-50 rounded-lg p-3 overflow-auto mt-1">{JSON.stringify(drawer.stats, null, 2)}</pre>
+                  </details>
                 </>
-              )}
+                )
+              })()}
             </div>
           </aside>
         </div>
