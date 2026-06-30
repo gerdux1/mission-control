@@ -315,14 +315,12 @@ const TOOLS = [
       if (status) params.set('status', status)
       if (assigned_to) params.set('assigned_to', assigned_to)
       if (priority) params.set('priority', priority)
+      // search is now a real server-side WHERE filter (title/description), so it
+      // applies before the limit instead of filtering one page client-side.
+      if (search) params.set('search', String(search))
       if (limit) params.set('limit', String(Math.min(limit, 200)))
       const qs = params.toString() ? `?${params.toString()}` : ''
-      const result = await api('GET', `/api/tasks${qs}`)
-      if (search && result?.tasks) {
-        const term = search.toLowerCase()
-        result.tasks = result.tasks.filter(t => t.title?.toLowerCase().includes(term))
-      }
-      return result
+      return api('GET', `/api/tasks${qs}`)
     },
   },
   {
