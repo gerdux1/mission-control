@@ -17,6 +17,45 @@ function formatTicketRef(prefix?: string | null, num?: number | null): string | 
   return `${prefix}-${String(num).padStart(3, '0')}`
 }
 
+// Query params the LIST endpoint actually applies. Anything outside this set is
+// rejected (400) rather than silently ignored — a silently-ignored filter is
+// what caused the 30 Jun 2026 mass-delete: a bulk-delete loop scoped with
+// `?search=` got the WHOLE board back (the param was dropped) and wiped ~123
+// real tasks. See memory/project_mc_mass_delete_incident_recovered_30jun.md.
+const LIST_TASKS_ALLOWED_PARAMS = new Set([
+  'status', 'assigned_to', 'priority', 'project_id',
+  'parent_task_id', 'search', 'limit', 'offset',
+])
+
+/**
+ * Reject any query param not in `allowed`. Returns a 400 NextResponse when an
+ * unsupported param is present, or null when the query string is clean. This is
+ * the guard that prevents a caller from believing they scoped a request when the
+ * filter was in fact dropped — never silently operate on the whole board.
+ */
+function rejectUnknownQueryParams(
+  searchParams: URLSearchParams,
+  allowed: Set<string>
+): NextResponse | null {
+  const unknown = [...new Set([...searchParams.keys()])].filter((k) => !allowed.has(k))
+  if (unknown.length === 0) return null
+  return NextResponse.json(
+    {
+      error: `Unsupported query param(s): ${unknown.join(', ')}. `
+        + `This endpoint does not filter by them, so honouring the request would `
+        + `operate on the entire board. Supported params: `
+        + `${[...allowed].join(', ') || '(none — use the request body)'}.`,
+      unknown_params: unknown,
+    },
+    { status: 400 }
+  )
+}
+
+// Escape LIKE wildcards so a literal % or _ in a search term doesn't widen the match.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
 function mapTaskRow(task: any): Task & { tags: string[]; metadata: Record<string, unknown> } {
   return {
     ...task,
@@ -72,10 +111,15 @@ export async function GET(request: NextRequest) {
     const workspaceId = auth.user.workspace_id;
     const { searchParams } = new URL(request.url);
 
+    // Reject filters we don't apply rather than silently returning everything.
+    const paramGuard = rejectUnknownQueryParams(searchParams, LIST_TASKS_ALLOWED_PARAMS);
+    if (paramGuard) return paramGuard;
+
     // Parse query parameters
     const status = searchParams.get('status');
     const assigned_to = searchParams.get('assigned_to');
     const priority = searchParams.get('priority');
+    const search = (searchParams.get('search') || '').trim();
     const projectIdParam = Number.parseInt(searchParams.get('project_id') || '', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -120,6 +164,12 @@ export async function GET(request: NextRequest) {
       params.push(priority);
     }
 
+    if (search) {
+      query += " AND (t.title LIKE ? ESCAPE '\\' OR t.description LIKE ? ESCAPE '\\')";
+      const like = `%${escapeLike(search)}%`;
+      params.push(like, like);
+    }
+
     if (Number.isFinite(projectIdParam)) {
       query += ' AND t.project_id = ?';
       params.push(projectIdParam);
@@ -161,6 +211,11 @@ export async function GET(request: NextRequest) {
     if (priority) {
       countQuery += ' AND priority = ?';
       countParams.push(priority);
+    }
+    if (search) {
+      countQuery += " AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')";
+      const like = `%${escapeLike(search)}%`;
+      countParams.push(like, like);
     }
     if (Number.isFinite(projectIdParam)) {
       countQuery += ' AND project_id = ?';
@@ -376,6 +431,14 @@ export async function PUT(request: NextRequest) {
   try {
     const db = getDatabase();
     const workspaceId = auth.user.workspace_id;
+
+    // Bulk update is scoped solely by the explicit task IDs in the body. A query
+    // param here means the caller thinks they're filtering — reject rather than
+    // apply the mutation against an unfiltered/whole set of IDs.
+    const { searchParams } = new URL(request.url);
+    const paramGuard = rejectUnknownQueryParams(searchParams, new Set());
+    if (paramGuard) return paramGuard;
+
     const validated = await validateBody(request, bulkUpdateTaskStatusSchema);
     if ('error' in validated) return validated.error;
     const { tasks } = validated.data;
