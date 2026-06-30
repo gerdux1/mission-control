@@ -21,6 +21,7 @@ import { registerNavItems, registerPanel } from '@/lib/plugins'
 import { EplTodayPanel } from '@/components/panels/epl-today-panel'
 import { EplProjectsPanel } from '@/components/panels/epl-projects-panel'
 import { EplPropertiesPanel } from '@/components/panels/epl-properties-panel'
+import { EplPropertyIssuesPanel } from '@/components/panels/epl-property-issues-panel'
 import { EplMaintenancePanel } from '@/components/panels/epl-maintenance-panel'
 import { EplDecisionsPanel } from '@/components/panels/epl-decisions-panel'
 import { EplAgentsPanel } from '@/components/panels/epl-agents-panel'
@@ -41,6 +42,7 @@ export function initEplPanelsPlugin(): void {
     { id: 'today',         label: 'Today',          groupId: 'core', icon: '🌅' },
     { id: 'projects',      label: 'Projects',       groupId: 'core', icon: '📋' },
     { id: 'properties',    label: 'Properties',     groupId: 'core', icon: '🏠' },
+    { id: 'property-issues', label: 'Property issues', groupId: 'core', icon: '🩺' },
     { id: 'fleet-health',  label: 'Fleet health',   groupId: 'core', icon: '🖥' },
     { id: 'fleet-schedule', label: 'Fleet schedule', groupId: 'core', icon: '🗓' },
     { id: 'maintenance',   label: 'Maintenance',    groupId: 'core', icon: '🔧' },
@@ -54,6 +56,7 @@ export function initEplPanelsPlugin(): void {
   registerPanel('today',         EplTodayPanel)
   registerPanel('projects',      EplProjectsPanel)
   registerPanel('properties',    EplPropertiesPanel)
+  registerPanel('property-issues', EplPropertyIssuesPanel)
   registerPanel('fleet-health',  EplFleetHealthPanel)
   registerPanel('fleet-schedule', EplFleetSchedulePanel)
   registerPanel('maintenance',   EplMaintenancePanel)
