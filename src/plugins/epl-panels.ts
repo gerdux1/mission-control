@@ -54,6 +54,7 @@ export function initEplPanelsPlugin(): void {
     { id: 'decisions',     label: 'Decisions',      groupId: 'core', icon: '🎯' },
     { id: 'team',          label: 'Team',           groupId: 'core', icon: '👥' },
     { id: 'agents-fleet',  label: 'Agents (fleet)', groupId: 'core', icon: '🤖' },
+    { id: 'timeline',      label: 'Timeline',       groupId: 'core', icon: '🛤' },
     { id: 'access',        label: 'Setups',         groupId: 'core', icon: '🔑' },
     { id: 'channels',      label: 'Channels',       groupId: 'core', icon: '💬' },
     // Agent cockpit (Phase 1, read-only) — one Atlas export.
@@ -81,6 +82,7 @@ export function initEplPanelsPlugin(): void {
   registerPanel('decisions',     EplDecisionsPanel)
   registerPanel('team',          EplTeamPanel)
   registerPanel('agents-fleet',  EplAgentsPanel)
+  registerPanel('timeline',      EplTimelinePanel)
   registerPanel('access',        EplAccessMapPanel)
   registerPanel('channels',      EplChannelsPanel)
 
