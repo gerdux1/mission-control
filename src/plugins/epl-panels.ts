@@ -34,6 +34,7 @@ import { EplAgentFeedPanel } from '@/components/panels/epl-agent-feed-panel'
 import { EplToolsPanel } from '@/components/panels/epl-tools-panel'
 import { EplApprovalsPanel } from '@/components/panels/epl-approvals-panel'
 import { EplChatPanel } from '@/components/panels/epl-chat-panel'
+import { EplChannelsPanel } from '@/components/panels/epl-channels-panel'
 import { cockpitApprovalsEnabled, cockpitChatEnabled } from '@/lib/cockpit-flags'
 
 let _initialised = false
@@ -54,6 +55,7 @@ export function initEplPanelsPlugin(): void {
     { id: 'team',          label: 'Team',           groupId: 'core', icon: '👥' },
     { id: 'agents-fleet',  label: 'Agents (fleet)', groupId: 'core', icon: '🤖' },
     { id: 'access',        label: 'Setups',         groupId: 'core', icon: '🔑' },
+    { id: 'channels',      label: 'Channels',       groupId: 'core', icon: '💬' },
     // Agent cockpit (Phase 1, read-only) — one Atlas export.
     { id: 'cockpit-timeline', label: 'Timeline',   groupId: 'core', icon: '🛤' },
     { id: 'cockpit-feed',     label: 'Agent feed', groupId: 'core', icon: '🔀' },
@@ -80,6 +82,7 @@ export function initEplPanelsPlugin(): void {
   registerPanel('team',          EplTeamPanel)
   registerPanel('agents-fleet',  EplAgentsPanel)
   registerPanel('access',        EplAccessMapPanel)
+  registerPanel('channels',      EplChannelsPanel)
 
   // Agent cockpit (Phase 1, read-only).
   registerPanel('cockpit-timeline', EplTimelinePanel)
