@@ -128,14 +128,24 @@ function dedupeTokenRecords(records: TokenUsageRecord[]): TokenUsageRecord[] {
   const deduped: TokenUsageRecord[] = []
 
   for (const record of records) {
+    // A single POST persists the same usage to BOTH the JSON file and the
+    // token_usage table, so the dedup key must match across those two
+    // representations of one event. Two fields legitimately differ between them
+    // and are therefore EXCLUDED from the key:
+    //   - timestamp: JSON keeps full-precision ms (Date.now()); the DB stores
+    //     created_at in seconds and reads it back as created_at*1000. Normalize
+    //     to whole seconds so both collide.
+    //   - operation: the token_usage table has no operation column, so the DB
+    //     loader hardcodes 'heartbeat' while the JSON record keeps the real
+    //     value (e.g. 'chat_completion'). Excluded entirely.
+    // Without these adjustments every posted record was double-counted.
     const key = [
       record.sessionId,
       record.model,
-      record.timestamp,
+      Math.floor(Number(record.timestamp) / 1000),
       record.inputTokens,
       record.outputTokens,
       record.totalTokens,
-      record.operation,
       record.taskId ?? '',
       record.workspaceId ?? 1,
       record.duration ?? '',
@@ -559,15 +569,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const workspaceId = auth.user.workspace_id ?? 1
-    const { model, sessionId, inputTokens, outputTokens, operation = 'chat_completion', duration, taskId } = body
+    const { model, sessionId, inputTokens, outputTokens, operation = 'chat_completion', duration, taskId, costUsd, agentName } = body
 
-    if (!model || !sessionId || typeof inputTokens !== 'number' || typeof outputTokens !== 'number') {
+    // Cost-only reporters (e.g. Atlas dispatch) already know the dollar cost and
+    // have no token counts — accept an explicit costUsd + agentName and let tokens
+    // default to 0. Otherwise require token counts and derive cost from them.
+    const explicitCost = typeof costUsd === 'number' && isFinite(costUsd) ? costUsd : null
+    if (!model || !sessionId || (explicitCost == null && (typeof inputTokens !== 'number' || typeof outputTokens !== 'number'))) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const totalTokens = inputTokens + outputTokens
+    const inTok = typeof inputTokens === 'number' ? inputTokens : 0
+    const outTok = typeof outputTokens === 'number' ? outputTokens : 0
+    const totalTokens = inTok + outTok
     const providerSubscriptions = getProviderSubscriptionFlags()
-    const cost = calculateTokenCost(model, inputTokens, outputTokens, { providerSubscriptions })
+    const cost = explicitCost != null ? explicitCost : calculateTokenCost(model, inTok, outTok, { providerSubscriptions })
     const parsedTaskId =
       taskId != null && Number.isFinite(Number(taskId)) && Number(taskId) > 0
         ? Number(taskId)
@@ -586,10 +602,10 @@ export async function POST(request: NextRequest) {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       model,
       sessionId,
-      agentName: extractAgentName(sessionId),
+      agentName: (typeof agentName === 'string' && agentName.trim()) ? agentName.trim().toLowerCase() : extractAgentName(sessionId),
       timestamp: Date.now(),
-      inputTokens,
-      outputTokens,
+      inputTokens: inTok,
+      outputTokens: outTok,
       totalTokens,
       cost,
       operation,
@@ -623,8 +639,8 @@ export async function POST(request: NextRequest) {
       `).run(
         model,
         sessionId,
-        inputTokens,
-        outputTokens,
+        inTok,
+        outTok,
         createdAtSec,
         workspaceId,
         validatedTaskId,

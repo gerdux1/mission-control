@@ -9,6 +9,7 @@ interface AgentBreakdownRow {
   agent_name: string
   total_input_tokens: number
   total_output_tokens: number
+  stored_cost: number
   session_count: number
   request_count: number
   last_active: number
@@ -53,15 +54,17 @@ export async function GET(request: NextRequest) {
     const cutoff = Math.floor(Date.now() / 1000) - days * 86400
     const providerSubscriptions = getProviderSubscriptionFlags()
 
+    // Agent name: prefer the explicit agent_name column (set by cost-only
+    // reporters like Atlas dispatch); fall back to the session-id prefix.
+    const agentExpr = `COALESCE(NULLIF(agent_name, ''), CASE WHEN INSTR(session_id, ':') > 0 THEN SUBSTR(session_id, 1, INSTR(session_id, ':') - 1) ELSE session_id END)`
+
     // Query per-agent totals with per-model breakdown embedded as JSON
     const rows = db.prepare(`
       SELECT
-        CASE
-          WHEN INSTR(session_id, ':') > 0 THEN SUBSTR(session_id, 1, INSTR(session_id, ':') - 1)
-          ELSE session_id
-        END AS agent_name,
+        ${agentExpr} AS agent_name,
         SUM(input_tokens)  AS total_input_tokens,
         SUM(output_tokens) AS total_output_tokens,
+        COALESCE(SUM(cost_usd), 0) AS stored_cost,
         COUNT(DISTINCT session_id) AS session_count,
         COUNT(*)           AS request_count,
         MAX(created_at)    AS last_active,
@@ -70,19 +73,17 @@ export async function GET(request: NextRequest) {
       WHERE workspace_id = ?
         AND created_at >= ?
       GROUP BY agent_name
-      ORDER BY (SUM(input_tokens) + SUM(output_tokens)) DESC
+      ORDER BY stored_cost DESC, (SUM(input_tokens) + SUM(output_tokens)) DESC
     `).all(workspaceId, cutoff) as AgentBreakdownRow[]
 
     // For accurate per-model cost we need a second pass grouping by agent+model
     const modelRows = db.prepare(`
       SELECT
-        CASE
-          WHEN INSTR(session_id, ':') > 0 THEN SUBSTR(session_id, 1, INSTR(session_id, ':') - 1)
-          ELSE session_id
-        END AS agent_name,
+        ${agentExpr} AS agent_name,
         model,
         SUM(input_tokens)  AS input_tokens,
         SUM(output_tokens) AS output_tokens,
+        COALESCE(SUM(cost_usd), 0) AS stored_cost,
         COUNT(*)           AS request_count
       FROM token_usage
       WHERE workspace_id = ?
@@ -94,13 +95,17 @@ export async function GET(request: NextRequest) {
       model: string
       input_tokens: number
       output_tokens: number
+      stored_cost: number
       request_count: number
     }>
 
-    // Build model map keyed by agent name
+    // Build model map keyed by agent name. Prefer the stored dollar cost
+    // (cost-only reporters) and only derive from tokens when none was stored.
     const modelsByAgent = new Map<string, ModelBreakdown[]>()
     for (const row of modelRows) {
-      const cost = calculateTokenCost(row.model, row.input_tokens, row.output_tokens, { providerSubscriptions })
+      const cost = row.stored_cost && row.stored_cost > 0
+        ? row.stored_cost
+        : calculateTokenCost(row.model, row.input_tokens, row.output_tokens, { providerSubscriptions })
       const list = modelsByAgent.get(row.agent_name) || []
       list.push({
         model: row.model,
@@ -115,7 +120,8 @@ export async function GET(request: NextRequest) {
     // Assemble final response
     const agents: AgentBreakdown[] = rows.map((row) => {
       const models = modelsByAgent.get(row.agent_name) || []
-      const totalCost = models.reduce((sum, m) => sum + m.cost, 0)
+      const modelsCost = models.reduce((sum, m) => sum + m.cost, 0)
+      const totalCost = row.stored_cost && row.stored_cost > 0 ? row.stored_cost : modelsCost
       return {
         agent: row.agent_name,
         total_input_tokens: row.total_input_tokens,
