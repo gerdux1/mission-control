@@ -211,8 +211,8 @@ export function EplProjectsPanel() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-4">
       <header className="flex items-baseline gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold tracking-tight">📋 Projects</h1>
-        <span className="text-slate-500">{total} cards across {columns.length} columns · Asana replacement (Wk4 sunset target)</span>
+        <h1 className="text-2xl font-semibold tracking-tight">🗂 Office</h1>
+        <span className="text-slate-500">{total} office &amp; ops tasks · Asana replacement · maintenance lives on the Maintenance board</span>
         <button onClick={load} className="ml-auto text-xs underline text-slate-500 hover:text-slate-700">refresh</button>
       </header>
 
