@@ -8,6 +8,7 @@
  *   - maintenance  Hugo Phase 3 — Kanban + heat map
  *   - decisions    32-decision queue with Atlas recommendations
  *   - team         Agents + humans building together — people, pairings, hand-offs (Supabase brain)
+ *   - operations   Kanban for Operations project (pid=21, migrated from Asana)
  *
  * Visual spec: ~/mission-control/mockup/*.html (signed off 26 May 2026)
  * Build runbook: ~/mission-control/JOSE_HANDOFF.md
@@ -21,6 +22,7 @@ import { registerNavItems, registerPanel } from '@/lib/plugins'
 import { EplTodayPanel } from '@/components/panels/epl-today-panel'
 import { EplProjectsPanel } from '@/components/panels/epl-projects-panel'
 import { EplPropertiesPanel } from '@/components/panels/epl-properties-panel'
+import { EplPropertyIssuesPanel } from '@/components/panels/epl-property-issues-panel'
 import { EplMaintenancePanel } from '@/components/panels/epl-maintenance-panel'
 import { EplDecisionsPanel } from '@/components/panels/epl-decisions-panel'
 import { EplAgentsPanel } from '@/components/panels/epl-agents-panel'
@@ -35,6 +37,7 @@ import { EplToolsPanel } from '@/components/panels/epl-tools-panel'
 import { EplApprovalsPanel } from '@/components/panels/epl-approvals-panel'
 import { EplChatPanel } from '@/components/panels/epl-chat-panel'
 import { EplChannelsPanel } from '@/components/panels/epl-channels-panel'
+import { EplOperationsPanel } from '@/components/panels/epl-operations-panel'
 import { cockpitApprovalsEnabled, cockpitChatEnabled } from '@/lib/cockpit-flags'
 
 let _initialised = false
@@ -48,8 +51,10 @@ export function initEplPanelsPlugin(): void {
     { id: 'today',         label: 'Today',          groupId: 'core', icon: '🌅' },
     { id: 'projects',      label: 'Projects',       groupId: 'core', icon: '📋' },
     { id: 'properties',    label: 'Properties',     groupId: 'core', icon: '🏠' },
+    { id: 'property-issues', label: 'Property issues', groupId: 'core', icon: '🩺' },
     { id: 'fleet-health',  label: 'Fleet health',   groupId: 'core', icon: '🖥' },
     { id: 'fleet-schedule', label: 'Fleet schedule', groupId: 'core', icon: '🗓' },
+    { id: 'operations',    label: 'Operations',     groupId: 'core', icon: '⚙️' },
     { id: 'maintenance',   label: 'Maintenance',    groupId: 'core', icon: '🔧' },
     { id: 'decisions',     label: 'Decisions',      groupId: 'core', icon: '🎯' },
     { id: 'team',          label: 'Team',           groupId: 'core', icon: '👥' },
@@ -75,8 +80,10 @@ export function initEplPanelsPlugin(): void {
   registerPanel('today',         EplTodayPanel)
   registerPanel('projects',      EplProjectsPanel)
   registerPanel('properties',    EplPropertiesPanel)
+  registerPanel('property-issues', EplPropertyIssuesPanel)
   registerPanel('fleet-health',  EplFleetHealthPanel)
   registerPanel('fleet-schedule', EplFleetSchedulePanel)
+  registerPanel('operations',    EplOperationsPanel)
   registerPanel('maintenance',   EplMaintenancePanel)
   registerPanel('decisions',     EplDecisionsPanel)
   registerPanel('team',          EplTeamPanel)
