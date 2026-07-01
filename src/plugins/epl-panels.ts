@@ -49,7 +49,7 @@ export function initEplPanelsPlugin(): void {
   registerNavItems([
     { id: 'start-here',    label: 'Start here',     groupId: 'core', icon: '📍' },
     { id: 'today',         label: 'Today',          groupId: 'core', icon: '🌅' },
-    { id: 'projects',      label: 'Projects',       groupId: 'core', icon: '📋' },
+    { id: 'projects',      label: 'Office',         groupId: 'core', icon: '🗂' },
     { id: 'properties',    label: 'Properties',     groupId: 'core', icon: '🏠' },
     { id: 'property-issues', label: 'Property issues', groupId: 'core', icon: '🩺' },
     { id: 'fleet-health',  label: 'Fleet health',   groupId: 'core', icon: '🖥' },
