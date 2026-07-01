@@ -121,12 +121,27 @@ function safeParseTags(json: string): string[] {
   }
 }
 
+/**
+ * Maintenance service-calls live on the Maintenance page (Hugo/BOOM), NOT on the
+ * Office board. Exclude them here so Office = office/EA/ops work only, with no
+ * duplication. A task is "maintenance" if it's under the MAINT project prefix or
+ * tagged maintenance/hugo.
+ */
+function isMaintenanceTask(row: TaskRow): boolean {
+  const prefix = (row as { project_prefix?: string | null }).project_prefix
+  if (prefix && prefix.toUpperCase() === 'MAINT') return true
+  const tags = row.tags ? safeParseTags(row.tags) : []
+  return tags.some(t => ['maintenance', 'hugo'].includes(t.toLowerCase()))
+}
+
 function buildColumnsFromTasks(rows: TaskRow[]): Column[] {
   const columns: Column[] = COLUMN_DEFS.map(c => ({ id: c.id, label: c.label, cards: [] }))
   const byId = new Map(columns.map(c => [c.id, c]))
   for (const row of rows) {
     // Root tasks only on the board; subtasks shown in detail drawer (Phase 2c).
     if (row.parent_task_id) continue
+    // Office board excludes maintenance service-calls (they live on Maintenance).
+    if (isMaintenanceTask(row)) continue
     const colId = statusToColumn(row.status, row.completed_at)
     if (!colId) continue
     const col = byId.get(colId)
